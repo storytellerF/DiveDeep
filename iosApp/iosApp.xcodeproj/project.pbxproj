@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		EDA3A914447797B4D7FDEB52 /* KotlinProject.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KotlinProject.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EDA3A914447797B4D7FDEB52 /* DiveDeep.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiveDeep.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		F0D033D49B3861560F9AFADF /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				EDA3A914447797B4D7FDEB52 /* KotlinProject.app */,
+				EDA3A914447797B4D7FDEB52 /* DiveDeep.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = EDA3A914447797B4D7FDEB52 /* KotlinProject.app */;
+			productReference = EDA3A914447797B4D7FDEB52 /* DiveDeep.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

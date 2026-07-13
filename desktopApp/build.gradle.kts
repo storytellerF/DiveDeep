@@ -17,11 +17,11 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.storyteller_f.project.MainKt"
+        mainClass = "com.storyteller_f.divedeep.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.storyteller_f.project"
+            packageName = "com.storyteller_f.divedeep"
             packageVersion = "1.0.0"
         }
     }

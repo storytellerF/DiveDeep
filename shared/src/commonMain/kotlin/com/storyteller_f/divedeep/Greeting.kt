@@ -1,4 +1,4 @@
-package com.storyteller_f.project
+package com.storyteller_f.divedeep
 
 class Greeting {
     private val platform = getPlatform()

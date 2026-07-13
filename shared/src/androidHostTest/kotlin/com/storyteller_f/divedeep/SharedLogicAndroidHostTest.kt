@@ -1,4 +1,4 @@
-package com.storyteller_f.project
+package com.storyteller_f.divedeep
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
