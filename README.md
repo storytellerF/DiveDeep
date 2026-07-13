@@ -29,12 +29,25 @@ Use the run configurations provided by the run widget in your IDE's toolbar. You
 
 Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
 
+- Static analysis: `./gradlew detekt`
 - Android tests: `./gradlew :shared:testAndroidHostTest`
 - Desktop tests: `./gradlew :shared:jvmTest`
 - Web tests:
   - Wasm target: `./gradlew :shared:wasmJsTest`
   - JS target: `./gradlew :shared:jsTest`
 - iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+
+### Android E2E
+
+Run the Android accessibility smoke test with:
+
+```bash
+./scripts/android-e2e.sh
+```
+
+The E2E test uses the real local llmd IPC service and does not enable mock translation. Install an llmd package that exposes
+`dev.placeholder.llmd.LlmdIpcService` before starting the test. If the package or IPC service is unavailable, the script exits
+before installing or changing accessibility settings.
 
 ---
 

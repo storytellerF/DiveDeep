@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">DiveDeep</string>
+    <string name="accessibility_service_label">DiveDeep 屏幕翻译</string>
+    <string name="accessibility_service_description">读取屏幕上的中文文本，并在原位置显示系统语言的翻译。</string>
+    <string name="tile_label">DiveDeep</string>
 </resources>

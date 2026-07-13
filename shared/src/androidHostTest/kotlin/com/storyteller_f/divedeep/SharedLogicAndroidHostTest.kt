@@ -7,6 +7,10 @@ class SharedLogicAndroidHostTest {
 
     @Test
     fun example() {
-        assertEquals(3, 1 + 2)
+        assertEquals(EXPECTED_SUM, 1 + 2)
+    }
+
+    private companion object {
+        const val EXPECTED_SUM = 3
     }
 }
