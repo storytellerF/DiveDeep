@@ -1,4 +1,4 @@
-package com.storyteller_f.project
+package com.storyteller_f.divedeep
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -16,8 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import org.jetbrains.compose.resources.painterResource
 
-import kotlinproject.shared.generated.resources.Res
-import kotlinproject.shared.generated.resources.compose_multiplatform
+import divedeep.shared.generated.resources.Res
+import divedeep.shared.generated.resources.compose_multiplatform
 
 @Composable
 @Preview

@@ -21,11 +21,11 @@ dependencies {
 }
 
 android {
-    namespace = "com.storyteller_f.project"
+    namespace = "com.storyteller_f.divedeep"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.storyteller_f.project"
+        applicationId = "com.storyteller_f.divedeep"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

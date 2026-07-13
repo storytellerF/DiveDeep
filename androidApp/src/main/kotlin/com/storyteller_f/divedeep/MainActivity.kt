@@ -1,4 +1,4 @@
-package com.storyteller_f.project
+package com.storyteller_f.divedeep
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
