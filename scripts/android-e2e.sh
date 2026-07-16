@@ -11,6 +11,8 @@ APP_PACKAGE="com.storyteller_f.divedeep"
 FIXTURE_PACKAGE="com.storyteller_f.divedeep.fixture"
 LLMD_PACKAGE="com.storytellerf.llmd"
 LLMD_SERVICE_CLASS="com.storytellerf.llmd.LlmdIpcService"
+LLMD_APK="${LLMD_APK:-}"
+LLMD_REPO="${LLMD_REPO:-}"
 STARTED_APPIUM_PID=""
 USING_EXISTING_APPIUM=false
 
@@ -60,14 +62,91 @@ wake_device() {
   adb_cmd shell wm dismiss-keyguard >/dev/null 2>&1 || true
 }
 
-require_llmd_service() {
-  if ! adb_cmd shell pm path "$LLMD_PACKAGE" | tr -d '\r' | grep -q '^package:'; then
-    echo "Local llmd package is not installed: $LLMD_PACKAGE" >&2
+is_llmd_package_installed() {
+  adb_cmd shell pm path "$LLMD_PACKAGE" | tr -d '\r' | grep -q '^package:'
+}
+
+is_llmd_service_available() {
+  adb_cmd shell dumpsys package "$LLMD_PACKAGE" | tr -d '\r' | grep -Fq "$LLMD_SERVICE_CLASS"
+}
+
+newest_apk() {
+  local output_dir="$1"
+  find "$output_dir" -type f -name '*.apk' -printf '%T@ %p\n' 2>/dev/null |
+    sort -n |
+    tail -n 1 |
+    cut -d' ' -f2-
+}
+
+install_llmd_apk() {
+  local apk="$1"
+  if [[ ! -f "$apk" ]]; then
+    echo "llmd APK does not exist: $apk" >&2
     exit 1
   fi
 
-  if ! adb_cmd shell dumpsys package "$LLMD_PACKAGE" | tr -d '\r' | grep -Fq "$LLMD_SERVICE_CLASS"; then
+  echo "Installing llmd APK: $apk"
+  adb_cmd install -r -t "$apk"
+}
+
+detect_llmd_repo() {
+  if [[ -n "$LLMD_REPO" ]]; then
+    printf '%s' "$LLMD_REPO"
+  elif [[ -f "$ROOT_DIR/../llmd/app/package.json" ]]; then
+    printf '%s' "$ROOT_DIR/../llmd"
+  fi
+}
+
+build_and_install_llmd() {
+  local repo="$1"
+  local app_dir="$repo/app"
+  local output_dir="$app_dir/src-tauri/gen/android/app/build/outputs/apk"
+  local apk
+
+  if [[ ! -f "$app_dir/package.json" ]]; then
+    echo "LLMD_REPO does not point to an llmd checkout with app/package.json: $repo" >&2
+    exit 1
+  fi
+
+  echo "Building llmd Android debug APK through Tauri CLI..."
+  (
+    cd "$app_dir"
+    if [[ ! -d node_modules ]]; then
+      npm ci
+    fi
+    npm run tauri android build -- --debug --apk
+  )
+
+  apk="$(newest_apk "$output_dir")"
+  if [[ -z "$apk" ]]; then
+    echo "Could not find a built llmd APK under: $output_dir" >&2
+    exit 1
+  fi
+  install_llmd_apk "$apk"
+}
+
+ensure_llmd_service() {
+  local repo
+  if ! is_llmd_package_installed || ! is_llmd_service_available; then
+    if [[ -n "$LLMD_APK" ]]; then
+      install_llmd_apk "$LLMD_APK"
+    else
+      repo="$(detect_llmd_repo)"
+      if [[ -n "$repo" ]]; then
+        build_and_install_llmd "$repo"
+      fi
+    fi
+  fi
+
+  if ! is_llmd_package_installed; then
+    echo "Local llmd package is not installed: $LLMD_PACKAGE" >&2
+    echo "Set LLMD_APK to an existing debug APK or LLMD_REPO to an llmd checkout." >&2
+    exit 1
+  fi
+
+  if ! is_llmd_service_available; then
     echo "Local llmd IPC service is unavailable: $LLMD_SERVICE_CLASS" >&2
+    echo "Install an llmd build that includes the IPC authorization service." >&2
     exit 1
   fi
 }
@@ -129,7 +208,7 @@ cleanup() {
 
 cd "$ROOT_DIR"
 
-require_llmd_service
+ensure_llmd_service
 
 OLD_SERVICES="$(read_setting enabled_accessibility_services)"
 OLD_ACCESSIBILITY_ENABLED="$(read_setting accessibility_enabled)"

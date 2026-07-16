@@ -45,10 +45,20 @@ Run the Android accessibility smoke test with:
 ./scripts/android-e2e.sh
 ```
 
-The E2E test uses the real local llmd IPC service and does not enable mock translation. Install an llmd package that exposes
-`com.storytellerf.llmd.LlmdIpcService` before starting the test. If the package or IPC service is unavailable, the script exits
-before installing or changing accessibility settings. DiveDeep opens the llmd authorization screen before saving the local IPC
-backend, and llmd must authorize the installed DiveDeep package before IPC requests succeed.
+The E2E test uses the real local llmd IPC service and does not enable mock translation. The script checks for an installed llmd
+package exposing `com.storytellerf.llmd.LlmdIpcService` before changing accessibility settings. If llmd is missing, either pass an
+existing APK or point the script at an llmd checkout:
+
+```bash
+LLMD_APK=/path/to/app-universal-debug.apk ./scripts/android-e2e.sh
+LLMD_REPO=../llmd ./scripts/android-e2e.sh
+```
+
+When `LLMD_REPO` is set, the script builds llmd from the Tauri app directory with `npm run tauri android build -- --debug --apk`
+and installs the newest generated APK. Do not build llmd for this test by running Gradle directly from llmd's
+`app/src-tauri/gen/android` directory; that generated build expects Tauri mobile build context and can fail with a refused
+WebSocket connection. DiveDeep opens the llmd authorization screen before saving the local IPC backend, and llmd must authorize
+the installed DiveDeep package before IPC requests succeed.
 
 The script uses Appium with the UiAutomator2 driver to enable DiveDeep through the app UI. It runs `npm ci` when
 `node_modules` is missing, starts Appium on `127.0.0.1:4723` when no server is already running, and installs the
