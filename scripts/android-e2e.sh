@@ -240,7 +240,7 @@ adb_cmd shell am start -n "$FIXTURE_PACKAGE/.MainActivity" >/dev/null
 
 for _ in $(seq 1 180); do
   adb_cmd logcat -d -s DiveDeepOverlay > /tmp/divedeep-overlay.log
-  if grep -Eq 'render frame .* items=[1-9][0-9]*' /tmp/divedeep-overlay.log; then
+  if grep -Fq 'com.storyteller_f.divedeep.fixture:id/title_text' /tmp/divedeep-overlay.log; then
     break
   fi
   sleep 1
@@ -248,9 +248,9 @@ done
 
 cat /tmp/divedeep-overlay.log
 
-if ! grep -Eq 'render frame .* items=[1-9][0-9]*' /tmp/divedeep-overlay.log; then
+if ! grep -Fq 'com.storyteller_f.divedeep.fixture:id/title_text' /tmp/divedeep-overlay.log; then
   adb_cmd logcat -d -s DiveDeepAccessibility
-  echo "DiveDeep overlay did not render translated items." >&2
+  echo "DiveDeep overlay did not render translated fixture items." >&2
   exit 1
 fi
 

@@ -34,6 +34,8 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     private val refreshLock = Any()
     private var refreshRunning = false
     private var refreshPending = false
+    @Volatile
+    private var refreshGeneration = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -109,19 +111,22 @@ class DiveDeepAccessibilityService : AccessibilityService() {
             return
         }
         latestCapturedNodes = accessibilityCaptureDriver.captureVisibleText()
-        synchronized(refreshLock) {
+        val generation = synchronized(refreshLock) {
+            refreshGeneration += 1
             if (refreshRunning) {
                 refreshPending = true
                 return
             }
             refreshRunning = true
+            refreshGeneration
         }
         refreshExecutor.execute {
-            runRefreshLoop()
+            runRefreshLoop(generation)
         }
     }
 
-    private fun runRefreshLoop() {
+    private fun runRefreshLoop(initialGeneration: Long) {
+        var generation = initialGeneration
         while (true) {
             val settings = latestSettings
             if (!settings.enabled ||
@@ -129,7 +134,7 @@ class DiveDeepAccessibilityService : AccessibilityService() {
             ) {
                 engine.stop()
             } else {
-                runCatching { engine.refresh() }
+                runCatching { engine.refresh { generation == refreshGeneration } }
                     .onFailure { error ->
                         Log.e(TAG, "Translation refresh failed: ${error.message}", error)
                     }
@@ -138,6 +143,7 @@ class DiveDeepAccessibilityService : AccessibilityService() {
             synchronized(refreshLock) {
                 if (refreshPending) {
                     refreshPending = false
+                    generation = refreshGeneration
                 } else {
                     refreshRunning = false
                     return

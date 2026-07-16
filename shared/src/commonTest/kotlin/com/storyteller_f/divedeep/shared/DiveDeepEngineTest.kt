@@ -30,7 +30,8 @@ class DiveDeepEngineTest {
 
         assertEquals(1, frame.items.size)
         assertEquals("[English] 开始测试", frame.items.single().translatedText)
-        assertEquals(frame, rendered.single())
+        assertEquals(emptyList(), rendered.first().items)
+        assertEquals(frame, rendered.last())
     }
 
     @Test
@@ -69,5 +70,85 @@ class DiveDeepEngineTest {
             listOf("[English] 第一项", "[English] 第二项", "[English] 第三项"),
             frame.items.map { it.translatedText },
         )
+    }
+
+    @Test
+    fun refreshRequestsOneNodeAtATimeAndRendersPartialFrames() {
+        val rendered = mutableListOf<TranslationFrame>()
+        val requestSizes = mutableListOf<Int>()
+        val engine = DiveDeepEngine(
+            captureDriver = ContentCaptureDriver {
+                listOf(
+                    ScreenTextNode("title", "标题", TextBounds(0, 0, 100, 40)),
+                    ScreenTextNode("body", "正文", TextBounds(0, 50, 100, 90)),
+                    ScreenTextNode("button", "按钮", TextBounds(0, 100, 100, 140), NodeRole.Button),
+                )
+            },
+            translationService = TranslationService { request ->
+                requestSizes += request.items.size
+                request.items.map { node ->
+                    TranslationItem(
+                        nodeId = node.id,
+                        sourceText = node.text,
+                        translatedText = "translated:${node.text}",
+                        bounds = node.bounds,
+                    )
+                }
+            },
+            overlayRenderer = object : OverlayRenderer {
+                override fun render(frame: TranslationFrame) {
+                    rendered += frame
+                }
+
+                override fun clear() = Unit
+            },
+            targetLanguageProvider = { "en-US" },
+        )
+
+        val frame = engine.refresh()
+
+        assertEquals(listOf(1, 1, 1), requestSizes)
+        assertEquals(listOf(0, 1, 2, 3), rendered.map { it.items.size })
+        assertEquals(frame, rendered.last())
+    }
+
+    @Test
+    fun refreshSkipsRenderingStaleNodeTranslationWhenStopped() {
+        val rendered = mutableListOf<TranslationFrame>()
+        var shouldContinueCalls = 0
+        val engine = DiveDeepEngine(
+            captureDriver = ContentCaptureDriver {
+                listOf(
+                    ScreenTextNode("title", "标题", TextBounds(0, 0, 100, 40)),
+                    ScreenTextNode("body", "正文", TextBounds(0, 50, 100, 90)),
+                )
+            },
+            translationService = TranslationService { request ->
+                request.items.map { node ->
+                    TranslationItem(
+                        nodeId = node.id,
+                        sourceText = node.text,
+                        translatedText = "translated:${node.text}",
+                        bounds = node.bounds,
+                    )
+                }
+            },
+            overlayRenderer = object : OverlayRenderer {
+                override fun render(frame: TranslationFrame) {
+                    rendered += frame
+                }
+
+                override fun clear() = Unit
+            },
+            targetLanguageProvider = { "en-US" },
+        )
+
+        val frame = engine.refresh {
+            shouldContinueCalls += 1
+            shouldContinueCalls == 1
+        }
+
+        assertEquals(emptyList(), frame.items)
+        assertEquals(listOf(0), rendered.map { it.items.size })
     }
 }
