@@ -1,5 +1,6 @@
 package com.storyteller_f.divedeep
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -37,13 +38,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private var enabled by mutableStateOf(false)
     private var translationConfig by mutableStateOf(TranslationConfig())
     private var blockedPackages by mutableStateOf<Set<String>>(emptySet())
     private var appEntries by mutableStateOf<List<AppEntry>>(emptyList())
+    private var llmdAuthorizationMessage by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -57,6 +62,7 @@ class MainActivity : ComponentActivity() {
                 config = translationConfig,
                 blockedPackages = blockedPackages,
                 appEntries = appEntries,
+                llmdAuthorizationMessage = llmdAuthorizationMessage,
                 onToggle = {
                     lifecycleScope.launch {
                         DiveDeepState.toggle(this@MainActivity)
@@ -68,8 +74,17 @@ class MainActivity : ComponentActivity() {
                 },
                 onSaveConfig = { config ->
                     lifecycleScope.launch {
+                        if (config.backend == TranslationBackend.LocalLlmdIpc && !isLlmdAuthorized(config)) {
+                            llmdAuthorizationMessage = "请先在 llmd 中授权 DiveDeep"
+                            openLlmdAuthorization()
+                            return@launch
+                        }
+                        llmdAuthorizationMessage = ""
                         DiveDeepState.setTranslationConfig(this@MainActivity, config)
                     }
+                },
+                onAuthorizeLlmd = {
+                    openLlmdAuthorization()
                 },
                 onPackageBlockedChange = { packageName, blocked ->
                     lifecycleScope.launch {
@@ -97,6 +112,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openLlmdAuthorization() {
+        val intent = Intent(LlmdIpcTranslationService.ACTION_AUTHORIZE_CALLER)
+            .setPackage(LlmdIpcTranslationService.LLMD_PACKAGE)
+            .putExtra(LlmdIpcTranslationService.EXTRA_CALLER_PACKAGE, packageName)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            llmdAuthorizationMessage = "未安装支持授权的 llmd"
+        }
+    }
+
+    private suspend fun isLlmdAuthorized(config: TranslationConfig): Boolean =
+        withContext(Dispatchers.IO) {
+            val service = LlmdIpcTranslationService(this@MainActivity) { config }
+            try {
+                val response = service.health()
+                val body = JSONObject(response)
+                body.optJSONObject("error")?.optString("type") != "authorization_required" &&
+                    body.optString("status") == "ok"
+            } catch (_: TranslationException) {
+                false
+            } finally {
+                service.close()
+            }
+        }
+
     private fun loadInstalledApps(): List<AppEntry> =
         packageManager.getInstalledApplications(0)
             .filter { it.packageName != packageName }
@@ -115,9 +156,11 @@ private fun DiveDeepSettingsScreen(
     config: TranslationConfig,
     blockedPackages: Set<String>,
     appEntries: List<AppEntry>,
+    llmdAuthorizationMessage: String,
     onToggle: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onSaveConfig: (TranslationConfig) -> Unit,
+    onAuthorizeLlmd: () -> Unit,
     onPackageBlockedChange: (String, Boolean) -> Unit,
 ) {
     var backend by remember(config) { mutableStateOf(config.backend) }
@@ -152,6 +195,8 @@ private fun DiveDeepSettingsScreen(
                     BackendSection(
                         backend = backend,
                         onBackendChange = { backend = it },
+                        authorizationMessage = llmdAuthorizationMessage,
+                        onAuthorizeLlmd = onAuthorizeLlmd,
                     )
                 }
 
@@ -258,13 +303,26 @@ private fun ActionSection(
 private fun BackendSection(
     backend: TranslationBackend,
     onBackendChange: (TranslationBackend) -> Unit,
+    authorizationMessage: String,
+    onAuthorizeLlmd: () -> Unit,
 ) {
     SectionTitle("翻译配置")
     BackendOption(
         selected = backend == TranslationBackend.LocalLlmdIpc,
         text = "本机 llmd IPC",
-        onClick = { onBackendChange(TranslationBackend.LocalLlmdIpc) },
+        onClick = {
+            onBackendChange(TranslationBackend.LocalLlmdIpc)
+            onAuthorizeLlmd()
+        },
     )
+    if (backend == TranslationBackend.LocalLlmdIpc) {
+        Button(onClick = onAuthorizeLlmd) {
+            Text("授权 llmd")
+        }
+        if (authorizationMessage.isNotBlank()) {
+            Text(authorizationMessage, style = MaterialTheme.typography.bodySmall)
+        }
+    }
     BackendOption(
         selected = backend == TranslationBackend.OpenAiHttp,
         text = "HTTP / HTTPS API",
@@ -388,9 +446,11 @@ private fun DiveDeepSettingsPreview() {
             AppEntry("设置", "com.android.settings"),
             AppEntry("Fixture", "com.storyteller_f.divedeep.fixture"),
         ),
+        llmdAuthorizationMessage = "",
         onToggle = {},
         onOpenAccessibilitySettings = {},
         onSaveConfig = {},
+        onAuthorizeLlmd = {},
         onPackageBlockedChange = { _, _ -> },
     )
 }

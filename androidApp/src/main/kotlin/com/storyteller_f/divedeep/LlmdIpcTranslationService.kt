@@ -6,13 +6,15 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
+import com.storytellerf.llmd.ipc.ILlmdChatCallback
+import com.storytellerf.llmd.ipc.ILlmdService
 import com.storyteller_f.divedeep.shared.MockTranslationService
 import com.storyteller_f.divedeep.shared.TranslationItem
 import com.storyteller_f.divedeep.shared.TranslationRequest
 import com.storyteller_f.divedeep.shared.TranslationService
-import dev.placeholder.llmd.ipc.ILlmdService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class LlmdIpcTranslationService(
     context: Context,
@@ -64,13 +66,47 @@ class LlmdIpcTranslationService(
 
     private fun requestChatCompletion(requestJson: String): String {
         try {
-            return requireService().chatCompletion(requestJson)
+            return requestAsync { callback ->
+                requireService().chatCompletionAsync(requestJson, callback)
+            }
         } catch (error: RemoteException) {
             synchronized(bindLock) {
                 clearBindingLocked()
             }
             throw TranslationException("Local llmd IPC request failed: ${error.message.orEmpty()}", error)
         }
+    }
+
+    fun health(): String =
+        requestAsync { callback ->
+            requireService().healthAsync(callback)
+        }
+
+    private fun requestAsync(call: (ILlmdChatCallback) -> Unit): String {
+        val latch = CountDownLatch(1)
+        val response = AtomicReference<String>()
+        val callback = object : ILlmdChatCallback.Stub() {
+            override fun onComplete(responseJson: String) {
+                response.set(responseJson)
+                latch.countDown()
+            }
+        }
+        try {
+            call(callback)
+        } catch (error: RemoteException) {
+            synchronized(bindLock) {
+                clearBindingLocked()
+            }
+            throw TranslationException("Local llmd IPC request failed: ${error.message.orEmpty()}", error)
+        }
+        return awaitResponse(latch, response)
+    }
+
+    private fun awaitResponse(latch: CountDownLatch, response: AtomicReference<String>): String {
+        if (!latch.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            throw TranslationException("Timed out waiting for local llmd IPC response")
+        }
+        return response.get() ?: throw TranslationException("Local llmd IPC returned an empty response")
     }
 
     private fun requireService(): ILlmdService {
@@ -136,10 +172,13 @@ class LlmdIpcTranslationService(
         }
     }
 
-    private companion object {
-        const val ACTION_BIND_IPC = "dev.placeholder.llmd.action.BIND_IPC"
-        const val LLMD_PACKAGE = "dev.placeholder.llmd"
-        const val LLMD_SERVICE_CLASS = "dev.placeholder.llmd.LlmdIpcService"
-        const val BIND_TIMEOUT_SECONDS = 10L
+    companion object {
+        const val ACTION_AUTHORIZE_CALLER = "com.storytellerf.llmd.action.AUTHORIZE_CALLER"
+        const val ACTION_BIND_IPC = "com.storytellerf.llmd.action.BIND_IPC"
+        const val EXTRA_CALLER_PACKAGE = "caller_package"
+        const val LLMD_PACKAGE = "com.storytellerf.llmd"
+        const val LLMD_SERVICE_CLASS = "com.storytellerf.llmd.LlmdIpcService"
+        private const val BIND_TIMEOUT_SECONDS = 10L
+        private const val REQUEST_TIMEOUT_SECONDS = 120L
     }
 }

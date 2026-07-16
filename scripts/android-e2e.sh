@@ -9,8 +9,8 @@ APPIUM_PORT="${APPIUM_PORT:-4723}"
 SERVICE="com.storyteller_f.divedeep/com.storyteller_f.divedeep.DiveDeepAccessibilityService"
 APP_PACKAGE="com.storyteller_f.divedeep"
 FIXTURE_PACKAGE="com.storyteller_f.divedeep.fixture"
-LLMD_PACKAGE="dev.placeholder.llmd"
-LLMD_SERVICE_CLASS="dev.placeholder.llmd.LlmdIpcService"
+LLMD_PACKAGE="com.storytellerf.llmd"
+LLMD_SERVICE_CLASS="com.storytellerf.llmd.LlmdIpcService"
 STARTED_APPIUM_PID=""
 USING_EXISTING_APPIUM=false
 
@@ -110,6 +110,11 @@ set_dive_deep_enabled() {
     node test/e2e/android-toggle.js "$1"
 }
 
+authorize_llmd_ipc() {
+  APPIUM_HOST="$APPIUM_HOST" APPIUM_PORT="$APPIUM_PORT" DEVICE="$DEVICE" \
+    node test/e2e/android-authorize-llmd.js
+}
+
 cleanup() {
   set +e
   set_dive_deep_enabled false >/dev/null 2>&1
@@ -140,6 +145,7 @@ wake_device
 adb_cmd shell am force-stop "$APP_PACKAGE"
 adb_cmd shell am force-stop "$FIXTURE_PACKAGE"
 start_appium
+authorize_llmd_ipc
 set_dive_deep_enabled true
 adb_cmd logcat -c
 write_setting enabled_accessibility_services "$(append_service "$OLD_SERVICES")"

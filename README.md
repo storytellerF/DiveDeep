@@ -46,8 +46,9 @@ Run the Android accessibility smoke test with:
 ```
 
 The E2E test uses the real local llmd IPC service and does not enable mock translation. Install an llmd package that exposes
-`dev.placeholder.llmd.LlmdIpcService` before starting the test. If the package or IPC service is unavailable, the script exits
-before installing or changing accessibility settings.
+`com.storytellerf.llmd.LlmdIpcService` before starting the test. If the package or IPC service is unavailable, the script exits
+before installing or changing accessibility settings. DiveDeep opens the llmd authorization screen before saving the local IPC
+backend, and llmd must authorize the installed DiveDeep package before IPC requests succeed.
 
 The script uses Appium with the UiAutomator2 driver to enable DiveDeep through the app UI. It runs `npm ci` when
 `node_modules` is missing, starts Appium on `127.0.0.1:4723` when no server is already running, and installs the

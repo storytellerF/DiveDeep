@@ -9,7 +9,7 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <queries>
-        <package android:name="dev.placeholder.llmd" />
+        <package android:name="com.storytellerf.llmd" />
     </queries>
 
     <application
