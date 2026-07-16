@@ -1,7 +1,6 @@
 package com.storyteller_f.divedeep
 
 import android.accessibilityservice.AccessibilityService
-import android.content.SharedPreferences
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.storyteller_f.divedeep.shared.ContentCaptureDriver
@@ -12,6 +11,11 @@ import com.storyteller_f.divedeep.shared.TranslationFrame
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class DiveDeepAccessibilityService : AccessibilityService() {
     private companion object {
@@ -22,21 +26,14 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     private lateinit var refreshExecutor: ExecutorService
     private lateinit var accessibilityCaptureDriver: AndroidAccessibilityCaptureDriver
     private lateinit var translationService: ConfiguredTranslationService
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     @Volatile
     private var latestCapturedNodes: List<ScreenTextNode> = emptyList()
+    @Volatile
+    private var latestSettings = DiveDeepSettings()
     private val refreshLock = Any()
     private var refreshRunning = false
     private var refreshPending = false
-
-    private val stateListener =
-        SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            if (DiveDeepState.isEnabled(this)) {
-                refresh()
-            } else {
-                engine.stop()
-            }
-            DiveDeepTileService.requestTileRefresh(this)
-        }
 
     override fun onCreate() {
         super.onCreate()
@@ -44,15 +41,16 @@ class DiveDeepAccessibilityService : AccessibilityService() {
         accessibilityCaptureDriver = AndroidAccessibilityCaptureDriver { rootInActiveWindow }
         val overlayRenderer = AndroidOverlayRenderer(this)
         translationService = ConfiguredTranslationService(this) {
-            DiveDeepState.getTranslationConfig(this)
+            latestSettings.translationConfig
         }
         engine = DiveDeepEngine(
             captureDriver = ContentCaptureDriver { latestCapturedNodes },
             translationService = translationService,
             overlayRenderer = object : OverlayRenderer {
                 override fun render(frame: TranslationFrame) {
-                    if (DiveDeepState.isEnabled(this@DiveDeepAccessibilityService) &&
-                        DiveDeepState.isPackageAllowed(this@DiveDeepAccessibilityService, rootInActiveWindow?.packageName)
+                    val settings = latestSettings
+                    if (settings.enabled &&
+                        DiveDeepState.isPackageAllowed(settings, rootInActiveWindow?.packageName)
                     ) {
                         overlayRenderer.render(frame)
                     }
@@ -64,21 +62,22 @@ class DiveDeepAccessibilityService : AccessibilityService() {
             },
             targetLanguageProvider = { Locale.getDefault().toLanguageTag() },
         )
-        DiveDeepState.register(this, stateListener)
+        collectSettings()
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        if (DiveDeepState.isEnabled(this)) refresh()
+        if (latestSettings.enabled) refresh()
         DiveDeepTileService.requestTileRefresh(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!DiveDeepState.isEnabled(this)) {
+        val settings = latestSettings
+        if (!settings.enabled) {
             engine.stop()
             return
         }
-        if (!DiveDeepState.isPackageAllowed(this, event?.packageName ?: rootInActiveWindow?.packageName)) {
+        if (!DiveDeepState.isPackageAllowed(settings, event?.packageName ?: rootInActiveWindow?.packageName)) {
             engine.stop()
             return
         }
@@ -90,7 +89,7 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        DiveDeepState.unregister(this, stateListener)
+        serviceScope.cancel()
         engine.stop()
         translationService.close()
         refreshExecutor.shutdownNow()
@@ -98,12 +97,13 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     }
 
     private fun refresh() {
-        if (!DiveDeepState.isEnabled(this)) {
+        val settings = latestSettings
+        if (!settings.enabled) {
             clearPendingRefresh()
             engine.stop()
             return
         }
-        if (!DiveDeepState.isPackageAllowed(this, rootInActiveWindow?.packageName)) {
+        if (!DiveDeepState.isPackageAllowed(settings, rootInActiveWindow?.packageName)) {
             clearPendingRefresh()
             engine.stop()
             return
@@ -123,8 +123,9 @@ class DiveDeepAccessibilityService : AccessibilityService() {
 
     private fun runRefreshLoop() {
         while (true) {
-            if (!DiveDeepState.isEnabled(this) ||
-                !DiveDeepState.isPackageAllowed(this, rootInActiveWindow?.packageName)
+            val settings = latestSettings
+            if (!settings.enabled ||
+                !DiveDeepState.isPackageAllowed(settings, rootInActiveWindow?.packageName)
             ) {
                 engine.stop()
             } else {
@@ -141,6 +142,22 @@ class DiveDeepAccessibilityService : AccessibilityService() {
                     refreshRunning = false
                     return
                 }
+            }
+        }
+    }
+
+    private fun collectSettings() {
+        serviceScope.launch {
+            DiveDeepState.initialize(this@DiveDeepAccessibilityService)
+            DiveDeepState.settingsFlow(this@DiveDeepAccessibilityService).collect { settings ->
+                latestSettings = settings
+                if (settings.enabled) {
+                    refresh()
+                } else {
+                    clearPendingRefresh()
+                    engine.stop()
+                }
+                DiveDeepTileService.requestTileRefresh(this@DiveDeepAccessibilityService)
             }
         }
     }

@@ -6,6 +6,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var enabled by mutableStateOf(false)
@@ -46,7 +48,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        refreshState()
+        appEntries = loadInstalledApps()
+        collectSettings()
 
         setContent {
             DiveDeepSettingsScreen(
@@ -55,19 +58,23 @@ class MainActivity : ComponentActivity() {
                 blockedPackages = blockedPackages,
                 appEntries = appEntries,
                 onToggle = {
-                    DiveDeepState.toggle(this)
-                    refreshState()
+                    lifecycleScope.launch {
+                        DiveDeepState.toggle(this@MainActivity)
+                        DiveDeepTileService.requestTileRefresh(this@MainActivity)
+                    }
                 },
                 onOpenAccessibilitySettings = {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 },
                 onSaveConfig = { config ->
-                    DiveDeepState.setTranslationConfig(this, config)
-                    refreshState()
+                    lifecycleScope.launch {
+                        DiveDeepState.setTranslationConfig(this@MainActivity, config)
+                    }
                 },
                 onPackageBlockedChange = { packageName, blocked ->
-                    DiveDeepState.setPackageBlocked(this, packageName, blocked)
-                    refreshState()
+                    lifecycleScope.launch {
+                        DiveDeepState.setPackageBlocked(this@MainActivity, packageName, blocked)
+                    }
                 },
             )
         }
@@ -75,15 +82,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshState()
+        appEntries = loadInstalledApps()
         DiveDeepTileService.requestTileRefresh(this)
     }
 
-    private fun refreshState() {
-        enabled = DiveDeepState.isEnabled(this)
-        translationConfig = DiveDeepState.getTranslationConfig(this)
-        blockedPackages = DiveDeepState.getBlockedPackages(this)
-        appEntries = loadInstalledApps()
+    private fun collectSettings() {
+        lifecycleScope.launch {
+            DiveDeepState.initialize(this@MainActivity)
+            DiveDeepState.settingsFlow(this@MainActivity).collect { settings ->
+                enabled = settings.enabled
+                translationConfig = settings.translationConfig
+                blockedPackages = settings.blockedPackages
+            }
+        }
     }
 
     private fun loadInstalledApps(): List<AppEntry> =

@@ -4,11 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ADB="${ADB:-adb}"
 DEVICE="${DEVICE:-}"
+APPIUM_HOST="${APPIUM_HOST:-127.0.0.1}"
+APPIUM_PORT="${APPIUM_PORT:-4723}"
 SERVICE="com.storyteller_f.divedeep/com.storyteller_f.divedeep.DiveDeepAccessibilityService"
 APP_PACKAGE="com.storyteller_f.divedeep"
 FIXTURE_PACKAGE="com.storyteller_f.divedeep.fixture"
 LLMD_PACKAGE="dev.placeholder.llmd"
 LLMD_SERVICE_CLASS="dev.placeholder.llmd.LlmdIpcService"
+STARTED_APPIUM_PID=""
+USING_EXISTING_APPIUM=false
 
 adb_cmd() {
   if [[ -n "$DEVICE" ]]; then
@@ -16,6 +20,10 @@ adb_cmd() {
   else
     "$ADB" "$@"
   fi
+}
+
+appium_status_url() {
+  printf 'http://%s:%s/status' "$APPIUM_HOST" "$APPIUM_PORT"
 }
 
 read_setting() {
@@ -64,18 +72,54 @@ require_llmd_service() {
   fi
 }
 
-set_dive_deep_enabled_pref() {
-  local enabled="$1"
-  adb_cmd shell "run-as $APP_PACKAGE sh -c 'mkdir -p shared_prefs && printf \"%s\n\" \"<?xml version=\\\"1.0\\\" encoding=\\\"utf-8\\\" standalone=\\\"yes\\\" ?>\" \"<map>\" \"    <boolean name=\\\"enabled\\\" value=\\\"$enabled\\\" />\" \"</map>\" > shared_prefs/dive_deep_state.xml'"
+ensure_node_dependencies() {
+  if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
+    npm ci
+  fi
+}
+
+ensure_appium_driver() {
+  if ! npx appium driver list --installed 2>/dev/null | grep -Fq 'uiautomator2'; then
+    npx appium driver install uiautomator2
+  fi
+}
+
+start_appium() {
+  if curl -fsS "$(appium_status_url)" >/dev/null 2>&1; then
+    USING_EXISTING_APPIUM=true
+    return
+  fi
+
+  ensure_appium_driver
+  npx appium --address "$APPIUM_HOST" --port "$APPIUM_PORT" --log-level error > /tmp/divedeep-appium.log 2>&1 &
+  STARTED_APPIUM_PID="$!"
+  for _ in $(seq 1 60); do
+    if curl -fsS "$(appium_status_url)" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+  done
+
+  cat /tmp/divedeep-appium.log >&2 || true
+  echo "Appium server did not start." >&2
+  exit 1
+}
+
+set_dive_deep_enabled() {
+  APPIUM_HOST="$APPIUM_HOST" APPIUM_PORT="$APPIUM_PORT" DEVICE="$DEVICE" \
+    node test/e2e/android-toggle.js "$1"
 }
 
 cleanup() {
   set +e
-  set_dive_deep_enabled_pref false >/dev/null 2>&1
+  set_dive_deep_enabled false >/dev/null 2>&1
   adb_cmd shell am force-stop "$APP_PACKAGE" >/dev/null 2>&1
   adb_cmd shell am force-stop "$FIXTURE_PACKAGE" >/dev/null 2>&1
   restore_setting enabled_accessibility_services "$OLD_SERVICES" >/dev/null 2>&1
   restore_setting accessibility_enabled "$OLD_ACCESSIBILITY_ENABLED" >/dev/null 2>&1
+  if [[ -n "$STARTED_APPIUM_PID" && "$USING_EXISTING_APPIUM" == false ]]; then
+    kill "$STARTED_APPIUM_PID" >/dev/null 2>&1
+  fi
 }
 
 cd "$ROOT_DIR"
@@ -86,6 +130,7 @@ OLD_SERVICES="$(read_setting enabled_accessibility_services)"
 OLD_ACCESSIBILITY_ENABLED="$(read_setting accessibility_enabled)"
 trap cleanup EXIT
 
+ensure_node_dependencies
 ./gradlew :androidApp:assembleDebug :androidTestFixture:assembleDebug
 
 adb_cmd install -r -t androidApp/build/outputs/apk/debug/androidApp-debug.apk
@@ -94,7 +139,8 @@ adb_cmd install -r -t apps/android-test-fixture/app/build/outputs/apk/debug/andr
 wake_device
 adb_cmd shell am force-stop "$APP_PACKAGE"
 adb_cmd shell am force-stop "$FIXTURE_PACKAGE"
-set_dive_deep_enabled_pref true
+start_appium
+set_dive_deep_enabled true
 adb_cmd logcat -c
 write_setting enabled_accessibility_services "$(append_service "$OLD_SERVICES")"
 write_setting accessibility_enabled 1

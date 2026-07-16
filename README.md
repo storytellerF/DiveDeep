@@ -49,6 +49,10 @@ The E2E test uses the real local llmd IPC service and does not enable mock trans
 `dev.placeholder.llmd.LlmdIpcService` before starting the test. If the package or IPC service is unavailable, the script exits
 before installing or changing accessibility settings.
 
+The script uses Appium with the UiAutomator2 driver to enable DiveDeep through the app UI. It runs `npm ci` when
+`node_modules` is missing, starts Appium on `127.0.0.1:4723` when no server is already running, and installs the
+UiAutomator2 driver when needed. Set `DEVICE`, `APPIUM_HOST`, or `APPIUM_PORT` to override the defaults.
+
 ---
 
 Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),

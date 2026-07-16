@@ -2,99 +2,120 @@ package com.storyteller_f.divedeep
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import java.io.IOException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+
+private val Context.diveDeepDataStore by preferencesDataStore(name = "dive_deep_state")
 
 object DiveDeepState {
     const val DEFAULT_API_BASE_URL = "http://127.0.0.1:11435"
     const val DEFAULT_MODEL = "gemma-4-E2B-it"
 
-    private const val PREFS = "dive_deep_state"
-    private const val KEY_ENABLED = "enabled"
-    private const val KEY_BLOCKED_PACKAGES = "blocked_packages"
-    private const val KEY_BACKEND = "backend"
-    private const val KEY_API_BASE_URL = "api_base_url"
-    private const val KEY_MODEL = "model"
-    private const val KEY_API_KEY = "api_key"
-    private const val KEY_USE_MOCK_TRANSLATION = "use_mock_translation"
+    private val enabledKey = booleanPreferencesKey("enabled")
+    private val blockedPackagesKey = stringSetPreferencesKey("blocked_packages")
+    private val backendKey = stringPreferencesKey("backend")
+    private val apiBaseUrlKey = stringPreferencesKey("api_base_url")
+    private val modelKey = stringPreferencesKey("model")
+    private val apiKeyKey = stringPreferencesKey("api_key")
+    private val useMockTranslationKey = booleanPreferencesKey("use_mock_translation")
 
-    fun isEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_ENABLED, false)
+    fun settingsFlow(context: Context): Flow<DiveDeepSettings> =
+        context.applicationContext.diveDeepDataStore.data
+            .catch { error ->
+                if (error is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw error
+                }
+            }
+            .map { preferences -> preferences.toSettings() }
 
-    fun setEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
+    suspend fun initialize(context: Context) {
+        val appContext = context.applicationContext
+        appContext.diveDeepDataStore.edit { preferences ->
+            if (!preferences.contains(blockedPackagesKey)) {
+                preferences[blockedPackagesKey] = defaultBlockedPackages(appContext)
+            }
+        }
     }
 
-    fun toggle(context: Context): Boolean {
-        val enabled = !isEnabled(context)
-        setEnabled(context, enabled)
+    suspend fun snapshot(context: Context): DiveDeepSettings {
+        initialize(context)
+        return settingsFlow(context).first()
+    }
+
+    suspend fun isEnabled(context: Context): Boolean =
+        snapshot(context).enabled
+
+    suspend fun setEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext.diveDeepDataStore.edit { preferences ->
+            preferences[enabledKey] = enabled
+        }
+    }
+
+    suspend fun toggle(context: Context): Boolean {
+        var enabled = false
+        context.applicationContext.diveDeepDataStore.edit { preferences ->
+            enabled = !(preferences[enabledKey] ?: false)
+            preferences[enabledKey] = enabled
+        }
         return enabled
     }
 
-    fun getBlockedPackages(context: Context): Set<String> {
-        ensureDefaultBlockedPackages(context)
-        return prefs(context).getStringSet(KEY_BLOCKED_PACKAGES, emptySet()).orEmpty()
-    }
-
-    fun setPackageBlocked(context: Context, packageName: String, blocked: Boolean) {
-        ensureDefaultBlockedPackages(context)
-        val blockedPackages = getBlockedPackages(context).toMutableSet()
-        if (blocked) {
-            blockedPackages += packageName
-        } else {
-            blockedPackages -= packageName
+    suspend fun setPackageBlocked(context: Context, packageName: String, blocked: Boolean) {
+        initialize(context)
+        context.applicationContext.diveDeepDataStore.edit { preferences ->
+            val blockedPackages = preferences[blockedPackagesKey].orEmpty().toMutableSet()
+            if (blocked) {
+                blockedPackages += packageName
+            } else {
+                blockedPackages -= packageName
+            }
+            preferences[blockedPackagesKey] = blockedPackages
         }
-        prefs(context).edit().putStringSet(KEY_BLOCKED_PACKAGES, blockedPackages).apply()
     }
 
-    fun isPackageAllowed(context: Context, packageName: CharSequence?): Boolean {
+    fun isPackageAllowed(settings: DiveDeepSettings, packageName: CharSequence?): Boolean {
         val normalized = packageName?.toString().orEmpty()
         if (normalized.isBlank()) return true
-        return normalized !in getBlockedPackages(context)
+        return normalized !in settings.blockedPackages
     }
 
-    fun getTranslationConfig(context: Context): TranslationConfig {
-        val sharedPreferences = prefs(context)
-        return TranslationConfig(
-            backend = TranslationBackend.fromPreference(
-                sharedPreferences.getString(KEY_BACKEND, null),
+    suspend fun setTranslationConfig(context: Context, config: TranslationConfig) {
+        context.applicationContext.diveDeepDataStore.edit { preferences ->
+            preferences[backendKey] = config.backend.preferenceValue
+            preferences[apiBaseUrlKey] = config.apiBaseUrl.ifBlank { DEFAULT_API_BASE_URL }
+            preferences[modelKey] = config.model.ifBlank { DEFAULT_MODEL }
+            preferences[apiKeyKey] = config.apiKey
+            preferences[useMockTranslationKey] = config.useMockTranslation
+        }
+    }
+
+    private fun Preferences.toSettings(): DiveDeepSettings =
+        DiveDeepSettings(
+            enabled = this[enabledKey] ?: false,
+            blockedPackages = this[blockedPackagesKey].orEmpty(),
+            translationConfig = TranslationConfig(
+                backend = TranslationBackend.fromPreference(this[backendKey]),
+                apiBaseUrl = this[apiBaseUrlKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_API_BASE_URL,
+                model = this[modelKey]?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL,
+                apiKey = this[apiKeyKey].orEmpty(),
+                useMockTranslation = this[useMockTranslationKey] ?: false,
             ),
-            apiBaseUrl = sharedPreferences.getString(KEY_API_BASE_URL, DEFAULT_API_BASE_URL)
-                ?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_API_BASE_URL,
-            model = sharedPreferences.getString(KEY_MODEL, DEFAULT_MODEL)
-                ?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_MODEL,
-            apiKey = sharedPreferences.getString(KEY_API_KEY, null).orEmpty(),
-            useMockTranslation = sharedPreferences.getBoolean(KEY_USE_MOCK_TRANSLATION, false),
         )
-    }
 
-    fun setTranslationConfig(context: Context, config: TranslationConfig) {
-        prefs(context).edit()
-            .putString(KEY_BACKEND, config.backend.preferenceValue)
-            .putString(KEY_API_BASE_URL, config.apiBaseUrl.ifBlank { DEFAULT_API_BASE_URL })
-            .putString(KEY_MODEL, config.model.ifBlank { DEFAULT_MODEL })
-            .putString(KEY_API_KEY, config.apiKey)
-            .putBoolean(KEY_USE_MOCK_TRANSLATION, config.useMockTranslation)
-            .apply()
-    }
-
-    fun register(context: Context, listener: SharedPreferences.OnSharedPreferenceChangeListener) {
-        prefs(context).registerOnSharedPreferenceChangeListener(listener)
-    }
-
-    fun unregister(context: Context, listener: SharedPreferences.OnSharedPreferenceChangeListener) {
-        prefs(context).unregisterOnSharedPreferenceChangeListener(listener)
-    }
-
-    private fun prefs(context: Context): SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private fun ensureDefaultBlockedPackages(context: Context) {
-        val sharedPreferences = prefs(context)
-        if (sharedPreferences.contains(KEY_BLOCKED_PACKAGES)) return
-
-        val launcherPackages = context.packageManager
+    private fun defaultBlockedPackages(context: Context): Set<String> =
+        context.packageManager
             .queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
                 0,
@@ -102,10 +123,6 @@ object DiveDeepState {
             .map { it.activityInfo.packageName }
             .filter { it.isNotBlank() }
             .toSet()
-        sharedPreferences.edit()
-            .putStringSet(KEY_BLOCKED_PACKAGES, launcherPackages)
-            .apply()
-    }
 }
 
 enum class TranslationBackend(val preferenceValue: String) {
@@ -117,6 +134,12 @@ enum class TranslationBackend(val preferenceValue: String) {
             entries.firstOrNull { it.preferenceValue == value } ?: LocalLlmdIpc
     }
 }
+
+data class DiveDeepSettings(
+    val enabled: Boolean = false,
+    val blockedPackages: Set<String> = emptySet(),
+    val translationConfig: TranslationConfig = TranslationConfig(),
+)
 
 data class TranslationConfig(
     val backend: TranslationBackend = TranslationBackend.LocalLlmdIpc,
