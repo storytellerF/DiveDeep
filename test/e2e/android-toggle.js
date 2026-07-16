@@ -1,4 +1,10 @@
-const { remote } = require('webdriverio');
+const {
+  click,
+  createSession,
+  deleteSession,
+  findByText,
+  waitUntil,
+} = require('./android-appium');
 
 const APP_PACKAGE = 'com.storyteller_f.divedeep';
 const APP_ACTIVITY = '.MainActivity';
@@ -12,36 +18,21 @@ function desiredEnabled() {
   throw new Error('Usage: node test/e2e/android-toggle.js <true|false>');
 }
 
-async function findByText(driver, text) {
-  const element = await driver.$(`android=new UiSelector().text("${text}")`);
-  if (await element.isExisting()) {
-    return element;
-  }
-  return null;
-}
-
 async function main() {
   const enabled = desiredEnabled();
-  const driver = await remote({
-    hostname: process.env.APPIUM_HOST || '127.0.0.1',
-    port: Number(process.env.APPIUM_PORT || 4723),
-    path: '/',
-    capabilities: {
-      platformName: 'Android',
-      'appium:automationName': 'UiAutomator2',
-      'appium:appPackage': APP_PACKAGE,
-      'appium:appActivity': APP_ACTIVITY,
-      'appium:noReset': true,
-      'appium:newCommandTimeout': 120,
-      ...(process.env.DEVICE ? { 'appium:udid': process.env.DEVICE } : {}),
-    },
+  const sessionId = await createSession({
+    'appium:appPackage': APP_PACKAGE,
+    'appium:appActivity': APP_ACTIVITY,
+    'appium:noReset': true,
+    'appium:forceAppLaunch': true,
+    'appium:newCommandTimeout': 120,
   });
 
   try {
     const targetText = enabled ? BUTTON_ENABLE : BUTTON_DISABLE;
     const oppositeText = enabled ? BUTTON_DISABLE : BUTTON_ENABLE;
-    await driver.waitUntil(
-      async () => Boolean((await findByText(driver, targetText)) || (await findByText(driver, oppositeText))),
+    await waitUntil(
+      async () => Boolean((await findByText(sessionId, targetText)) || (await findByText(sessionId, oppositeText))),
       {
         timeout: 30000,
         interval: 1000,
@@ -49,11 +40,11 @@ async function main() {
       },
     );
 
-    const targetButton = await findByText(driver, targetText);
+    const targetButton = await findByText(sessionId, targetText);
     if (targetButton) {
-      await targetButton.click();
-      await driver.waitUntil(
-        async () => Boolean(await findByText(driver, oppositeText)),
+      await click(sessionId, targetButton);
+      await waitUntil(
+        async () => Boolean(await findByText(sessionId, oppositeText)),
         {
           timeout: 10000,
           interval: 500,
@@ -62,7 +53,7 @@ async function main() {
       );
     }
   } finally {
-    await driver.deleteSession();
+    await deleteSession(sessionId);
   }
 }
 

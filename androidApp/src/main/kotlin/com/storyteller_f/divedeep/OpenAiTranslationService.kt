@@ -90,12 +90,19 @@ object OpenAiTranslationProtocol {
                     ),
             )
 
-    fun extractContent(responseBody: String): String =
-        JSONObject(responseBody)
+    fun extractContent(responseBody: String): String {
+        val response = JSONObject(responseBody)
+        response.optJSONObject("error")?.let { error ->
+            throw TranslationException(
+                "Translation API error: ${error.optString("message", error.toString())}",
+            )
+        }
+        return response
             .getJSONArray("choices")
             .getJSONObject(0)
             .getJSONObject("message")
             .getString("content")
+    }
 
     fun parseTranslations(content: String, expectedCount: Int): List<String> {
         val normalized = stripCodeFence(content.trim())

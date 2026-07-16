@@ -60,6 +60,7 @@ append_service() {
 wake_device() {
   adb_cmd shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
   adb_cmd shell wm dismiss-keyguard >/dev/null 2>&1 || true
+  adb_cmd shell input swipe 540 1900 540 300 300 >/dev/null 2>&1 || true
 }
 
 is_llmd_package_installed() {
@@ -67,7 +68,10 @@ is_llmd_package_installed() {
 }
 
 is_llmd_service_available() {
-  adb_cmd shell dumpsys package "$LLMD_PACKAGE" | tr -d '\r' | grep -Fq "$LLMD_SERVICE_CLASS"
+  local package_dump
+  package_dump="$(adb_cmd shell dumpsys package "$LLMD_PACKAGE" | tr -d '\r')"
+  grep -Fq 'com.storytellerf.llmd.action.BIND_IPC' <<<"$package_dump" &&
+    { grep -Fq "$LLMD_SERVICE_CLASS" <<<"$package_dump" || grep -Fq "$LLMD_PACKAGE/.LlmdIpcService" <<<"$package_dump"; }
 }
 
 newest_apk() {
@@ -158,7 +162,9 @@ ensure_node_dependencies() {
 }
 
 ensure_appium_driver() {
-  if ! npx appium driver list --installed 2>/dev/null | grep -Fq 'uiautomator2'; then
+  local installed_drivers
+  installed_drivers="$(npx appium driver list --installed 2>&1)"
+  if ! grep -Fq 'uiautomator2' <<<"$installed_drivers"; then
     npx appium driver install uiautomator2
   fi
 }
