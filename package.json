@@ -1,0 +1,12 @@
+{
+  "name": "divedeep-e2e",
+  "private": true,
+  "scripts": {
+    "e2e:android:authorize-llmd": "node test/e2e/android-authorize-llmd.js",
+    "e2e:android:toggle": "node test/e2e/android-toggle.js"
+  },
+  "devDependencies": {
+    "appium": "3.5.2",
+    "appium-uiautomator2-driver": "^8.1.0"
+  }
+}

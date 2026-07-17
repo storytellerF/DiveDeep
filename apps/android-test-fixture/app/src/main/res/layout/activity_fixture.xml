@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fixture_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:id="@+id/fixture_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:id="@+id/title_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="中文测试页面"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/long_paragraph"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="这是一段用于屏幕翻译测试的大段中文内容。它包含多个短句，用来验证无障碍节点采集、边界定位、翻译覆盖层显示以及滚动页面上的文本刷新。"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/primary_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="开始处理订单" />
+
+        <Button
+            android:id="@+id/secondary_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="查看详细说明" />
+
+        <EditText
+            android:id="@+id/search_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autofillHints=""
+            android:hint="请输入查询关键字"
+            android:inputType="text"
+            android:minHeight="48dp" />
+
+        <TextView
+            android:id="@+id/list_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="任务列表"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/list_item_one"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:text="第一项：检查账户状态" />
+
+        <TextView
+            android:id="@+id/list_item_two"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:text="第二项：确认配送地址" />
+
+        <TextView
+            android:id="@+id/list_item_three"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:text="第三项：提交反馈记录" />
+
+        <LinearLayout
+            android:id="@+id/nested_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/nested_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="嵌套区域标题"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/nested_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="嵌套内容用于确认深层视图树中的中文也能被采集。" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
