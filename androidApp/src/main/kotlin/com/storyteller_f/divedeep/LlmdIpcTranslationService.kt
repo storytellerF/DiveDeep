@@ -6,15 +6,22 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
-import com.storytellerf.llmd.ipc.ILlmdChatCallback
-import com.storytellerf.llmd.ipc.ILlmdService
 import com.storyteller_f.divedeep.shared.MockTranslationService
 import com.storyteller_f.divedeep.shared.TranslationItem
 import com.storyteller_f.divedeep.shared.TranslationRequest
 import com.storyteller_f.divedeep.shared.TranslationService
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
+import com.storytellerf.llmd.ipc.ILlmdChatCallback
+import com.storytellerf.llmd.ipc.ILlmdService
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 
 class LlmdIpcTranslationService(
     context: Context,
@@ -22,29 +29,34 @@ class LlmdIpcTranslationService(
 ) : TranslationService {
     private val appContext = context.applicationContext
     private val mockTranslationService = MockTranslationService()
-    private val bindLock = Any()
-    @Volatile
+    private val bindingScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val bindingMutex = Mutex()
     private var service: ILlmdService? = null
     private var bound = false
-    private var pendingBindLatch: CountDownLatch? = null
+    private var pendingBinding: CompletableDeferred<ILlmdService>? = null
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            synchronized(bindLock) {
-                service = ILlmdService.Stub.asInterface(binder)
-                pendingBindLatch?.countDown()
-                pendingBindLatch = null
+            bindingScope.launch {
+                bindingMutex.withLock {
+                    if (!bound) return@withLock
+
+                    val connectedService = ILlmdService.Stub.asInterface(binder)
+                    service = connectedService
+                    pendingBinding?.complete(connectedService)
+                    pendingBinding = null
+                }
             }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            synchronized(bindLock) {
-                service = null
+            bindingScope.launch {
+                clearBinding(TranslationException("Local llmd IPC service disconnected"))
             }
         }
 
         override fun onBindingDied(name: ComponentName?) {
-            synchronized(bindLock) {
-                clearBindingLocked()
+            bindingScope.launch {
+                clearBinding(TranslationException("Local llmd IPC service binding died"))
             }
         }
     }
@@ -64,108 +76,106 @@ class LlmdIpcTranslationService(
         return OpenAiTranslationProtocol.toTranslationItems(request, translatedTexts)
     }
 
-    private fun requestChatCompletion(requestJson: String): String {
-        try {
-            return requestAsync { callback ->
-                requireService().chatCompletionAsync(requestJson, callback)
-            }
-        } catch (error: RemoteException) {
-            synchronized(bindLock) {
-                clearBindingLocked()
-            }
-            throw TranslationException("Local llmd IPC request failed: ${error.message.orEmpty()}", error)
-        }
+    suspend fun health(): String = requestIpc { callback ->
+        requireService().healthAsync(callback)
     }
 
-    fun health(): String =
-        requestAsync { callback ->
-            requireService().healthAsync(callback)
+    private suspend fun requestChatCompletion(requestJson: String): String = requestIpc { callback ->
+        requireService().chatCompletionAsync(requestJson, callback)
+    }
+
+    private suspend fun requestIpc(call: suspend (ILlmdChatCallback) -> Unit): String =
+        try {
+            requestAsync(call)
+        } catch (error: RemoteException) {
+            clearBinding(error)
+            throw TranslationException("Local llmd IPC request failed: ${error.message.orEmpty()}", error)
         }
 
-    private fun requestAsync(call: (ILlmdChatCallback) -> Unit): String {
-        val latch = CountDownLatch(1)
-        val response = AtomicReference<String>()
+    private suspend fun requestAsync(call: suspend (ILlmdChatCallback) -> Unit): String {
+        val response = CompletableDeferred<String>()
         val callback = object : ILlmdChatCallback.Stub() {
             override fun onComplete(responseJson: String) {
-                response.set(responseJson)
-                latch.countDown()
+                response.complete(responseJson)
             }
         }
         try {
             call(callback)
         } catch (error: RemoteException) {
-            synchronized(bindLock) {
-                clearBindingLocked()
-            }
-            throw TranslationException("Local llmd IPC request failed: ${error.message.orEmpty()}", error)
+            response.completeExceptionally(error)
         }
-        return awaitResponse(latch, response)
+
+        return try {
+            withTimeout(REQUEST_TIMEOUT_MILLIS) { response.await() }
+                .takeIf(String::isNotEmpty)
+                ?: throw TranslationException("Local llmd IPC returned an empty response")
+        } catch (error: TimeoutCancellationException) {
+            throw TranslationException("Timed out waiting for local llmd IPC response", error)
+        }
     }
 
-    private fun awaitResponse(latch: CountDownLatch, response: AtomicReference<String>): String {
-        if (!latch.await(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            throw TranslationException("Timed out waiting for local llmd IPC response")
-        }
-        return response.get() ?: throw TranslationException("Local llmd IPC returned an empty response")
-    }
-
-    private fun requireService(): ILlmdService {
-        service?.let { return it }
-
-        var bindFailed = false
-        val latch = synchronized(bindLock) {
+    private suspend fun requireService(): ILlmdService {
+        val binding = bindingMutex.withLock {
             service?.let { return it }
-            pendingBindLatch ?: CountDownLatch(1).also { newLatch ->
-                pendingBindLatch = newLatch
-                if (!bound) {
-                    val intent = Intent(ACTION_BIND_IPC)
-                        .setComponent(ComponentName(LLMD_PACKAGE, LLMD_SERVICE_CLASS))
-                    if (!appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
-                        pendingBindLatch = null
-                        bindFailed = true
-                    } else {
-                        bound = true
-                    }
-                }
-            }
+            pendingBinding ?: startBindingLocked()
         }
-
-        if (!awaitService(latch, bindFailed)) {
-            synchronized(bindLock) {
-                if (pendingBindLatch == latch) {
-                    pendingBindLatch = null
-                }
-                if (service == null && bound) {
-                    runCatching { appContext.unbindService(connection) }
-                    bound = false
-                }
-            }
-            throw TranslationException(serviceUnavailableMessage(bindFailed))
+        return try {
+            withTimeout(BIND_TIMEOUT_MILLIS) { binding.await() }
+        } catch (error: TimeoutCancellationException) {
+            clearPendingBinding(binding)
+            throw TranslationException("Timed out waiting for local llmd IPC service", error)
         }
-
-        return service ?: throw TranslationException("Local llmd IPC service disconnected")
     }
 
-    private fun awaitService(latch: CountDownLatch, bindFailed: Boolean): Boolean =
-        !bindFailed && latch.await(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-
-    private fun serviceUnavailableMessage(bindFailed: Boolean): String =
-        if (bindFailed) {
-            "Local llmd IPC service is unavailable"
+    private fun startBindingLocked(): CompletableDeferred<ILlmdService> {
+        val binding = CompletableDeferred<ILlmdService>()
+        pendingBinding = binding
+        val intent = Intent(ACTION_BIND_IPC)
+            .setComponent(ComponentName(LLMD_PACKAGE, LLMD_SERVICE_CLASS))
+        if (appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)) {
+            bound = true
         } else {
-            "Timed out waiting for local llmd IPC service"
+            pendingBinding = null
+            binding.completeExceptionally(TranslationException("Local llmd IPC service is unavailable"))
         }
+        return binding
+    }
+
+    private suspend fun clearPendingBinding(binding: CompletableDeferred<ILlmdService>) {
+        bindingMutex.withLock {
+            if (pendingBinding === binding) {
+                clearBindingLocked(TranslationException("Timed out waiting for local llmd IPC service"))
+            }
+        }
+    }
+
+    private suspend fun clearBinding(cause: Throwable) {
+        bindingMutex.withLock {
+            clearBindingLocked(cause)
+        }
+    }
 
     fun close() {
-        synchronized(bindLock) {
-            clearBindingLocked()
+        val closeCause = TranslationException("Local llmd IPC service closed")
+        if (bindingMutex.tryLock()) {
+            try {
+                clearBindingLocked(closeCause)
+            } finally {
+                bindingMutex.unlock()
+            }
+            bindingScope.cancel()
+        } else {
+            bindingScope.launch {
+                clearBinding(closeCause)
+                bindingScope.cancel()
+            }
         }
     }
 
-    private fun clearBindingLocked() {
+    private fun clearBindingLocked(cause: Throwable) {
         service = null
-        pendingBindLatch?.countDown()
-        pendingBindLatch = null
+        pendingBinding?.completeExceptionally(cause)
+        pendingBinding = null
         if (bound) {
             runCatching { appContext.unbindService(connection) }
             bound = false
@@ -178,7 +188,7 @@ class LlmdIpcTranslationService(
         const val EXTRA_CALLER_PACKAGE = "caller_package"
         const val LLMD_PACKAGE = "com.storytellerf.llmd"
         const val LLMD_SERVICE_CLASS = "com.storytellerf.llmd.LlmdIpcService"
-        private const val BIND_TIMEOUT_SECONDS = 10L
-        private const val REQUEST_TIMEOUT_SECONDS = 120L
+        private const val BIND_TIMEOUT_MILLIS = 10_000L
+        private const val REQUEST_TIMEOUT_MILLIS = 120_000L
     }
 }
