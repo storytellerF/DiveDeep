@@ -9,8 +9,6 @@ import com.storyteller_f.divedeep.shared.OverlayRenderer
 import com.storyteller_f.divedeep.shared.ScreenTextNode
 import com.storyteller_f.divedeep.shared.TranslationFrame
 import java.util.Locale
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,7 +21,6 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     }
 
     private lateinit var engine: DiveDeepEngine
-    private lateinit var refreshExecutor: ExecutorService
     private lateinit var accessibilityCaptureDriver: AndroidAccessibilityCaptureDriver
     private lateinit var translationService: ConfiguredTranslationService
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -36,10 +33,11 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     private var refreshPending = false
     @Volatile
     private var refreshGeneration = 0L
+    @Volatile
+    private var serviceConnected = false
 
     override fun onCreate() {
         super.onCreate()
-        refreshExecutor = Executors.newSingleThreadExecutor()
         accessibilityCaptureDriver = AndroidAccessibilityCaptureDriver { rootInActiveWindow }
         val overlayRenderer = AndroidOverlayRenderer(this)
         translationService = ConfiguredTranslationService(this) {
@@ -69,6 +67,7 @@ class DiveDeepAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        serviceConnected = true
         if (latestSettings.enabled) refresh()
         DiveDeepTileService.requestTileRefresh(this)
     }
@@ -91,23 +90,23 @@ class DiveDeepAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        serviceConnected = false
         serviceScope.cancel()
         engine.stop()
         translationService.close()
-        refreshExecutor.shutdownNow()
         super.onDestroy()
     }
 
     private fun refresh() {
         val settings = latestSettings
-        if (!settings.enabled) {
+        val shouldRefresh = serviceConnected &&
+            settings.enabled &&
+            DiveDeepState.isPackageAllowed(settings, rootInActiveWindow?.packageName)
+        if (!shouldRefresh) {
             clearPendingRefresh()
-            engine.stop()
-            return
-        }
-        if (!DiveDeepState.isPackageAllowed(settings, rootInActiveWindow?.packageName)) {
-            clearPendingRefresh()
-            engine.stop()
+            if (serviceConnected) {
+                engine.stop()
+            }
             return
         }
         latestCapturedNodes = accessibilityCaptureDriver.captureVisibleText()
@@ -120,12 +119,12 @@ class DiveDeepAccessibilityService : AccessibilityService() {
             refreshRunning = true
             refreshGeneration
         }
-        refreshExecutor.execute {
+        serviceScope.launch(Dispatchers.IO) {
             runRefreshLoop(generation)
         }
     }
 
-    private fun runRefreshLoop(initialGeneration: Long) {
+    private suspend fun runRefreshLoop(initialGeneration: Long) {
         var generation = initialGeneration
         while (true) {
             val settings = latestSettings

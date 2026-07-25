@@ -24,6 +24,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.runtimeKtx)
+    implementation(libs.androidx.room.runtime)
 
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)

@@ -1,7 +1,7 @@
 package com.storyteller_f.divedeep.shared
 
 class MockTranslationService : TranslationService {
-    override fun translate(request: TranslationRequest): List<TranslationItem> {
+    override suspend fun translate(request: TranslationRequest): List<TranslationItem> {
         val languageName = languageName(request.targetLanguage)
         return request.items.map { node ->
             TranslationItem(

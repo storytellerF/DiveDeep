@@ -2,7 +2,7 @@ const {
   click,
   createSession,
   deleteSession,
-  findByText,
+  findByResourceId,
   waitUntil,
 } = require('./android-appium');
 
@@ -10,6 +10,7 @@ const LLMD_PACKAGE = 'com.storytellerf.llmd';
 const LLMD_AUTH_ACTIVITY = '.LlmdIpcAuthorizationActivity';
 const AUTH_ACTION = 'com.storytellerf.llmd.action.AUTHORIZE_CALLER';
 const CALLER_PACKAGE = 'com.storyteller_f.divedeep';
+const ALLOW_BUTTON_ID = 'com.storytellerf.llmd:id/ipc_authorization_allow';
 
 async function main() {
   const sessionId = await createSession({
@@ -24,14 +25,14 @@ async function main() {
 
   try {
     await waitUntil(
-      async () => Boolean(await findByText(sessionId, '允许')),
+      async () => Boolean(await findByResourceId(sessionId, ALLOW_BUTTON_ID)),
       {
         timeout: 30000,
         interval: 1000,
-        timeoutMsg: 'llmd authorization button did not appear',
+        timeoutMsg: 'llmd authorization allow button did not appear',
       },
     );
-    const allowButton = await findByText(sessionId, '允许');
+    const allowButton = await findByResourceId(sessionId, ALLOW_BUTTON_ID);
     await click(sessionId, allowButton);
   } finally {
     await deleteSession(sessionId);

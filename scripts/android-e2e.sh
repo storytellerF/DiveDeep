@@ -200,6 +200,24 @@ authorize_llmd_ipc() {
     node test/e2e/android-authorize-llmd.js
 }
 
+tap_title_translation_button() {
+  local bounds
+  local left
+  local top
+  local right
+  local bottom
+
+  adb_cmd shell uiautomator dump /sdcard/divedeep-window.xml >/dev/null
+  bounds="$(adb_cmd shell cat /sdcard/divedeep-window.xml | tr -d '\r' | grep -o 'resource-id="com.storyteller_f.divedeep.fixture:id/title_text"[^>]*/>' | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p')"
+  if [[ -z "$bounds" ]]; then
+    echo "Fixture title bounds were not found." >&2
+    exit 1
+  fi
+
+  read -r left top right bottom <<<"$bounds"
+  adb_cmd shell input tap "$((right - 52))" "$((top + 28))"
+}
+
 cleanup() {
   set +e
   set_dive_deep_enabled false >/dev/null 2>&1
@@ -256,6 +274,21 @@ fi
 
 if grep -Fq '[English]' /tmp/divedeep-overlay.log; then
   echo "DiveDeep overlay used mock translations." >&2
+  exit 1
+fi
+
+tap_title_translation_button
+
+for _ in $(seq 1 20); do
+  adb_cmd logcat -d -s DiveDeepOverlay > /tmp/divedeep-overlay.log
+  if grep -Fq 'bottom sheet node=com.storyteller_f.divedeep.fixture:id/title_text' /tmp/divedeep-overlay.log; then
+    break
+  fi
+  sleep 1
+done
+
+if ! grep -Fq 'bottom sheet node=com.storyteller_f.divedeep.fixture:id/title_text' /tmp/divedeep-overlay.log; then
+  echo "DiveDeep translation bottom sheet did not open after tapping the overlay button." >&2
   exit 1
 fi
 

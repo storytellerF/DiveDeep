@@ -4,6 +4,7 @@
 
 - Keep changes scoped to the requested behavior. Do not mix unrelated refactors into feature or test changes.
 - Prefer the existing Kotlin, Gradle, Compose, and shell script patterns in this repository.
+- The shared module currently targets Android, iOS, and JVM only. JS/WASM web targets are disabled because shared `commonMain` uses Room/SQLite for translation caching.
 - After code changes, run the narrowest checks that cover the touched behavior. Broaden to the full checks below when shared Android, IPC, workflow, or end-to-end behavior changes.
 
 ## Testing

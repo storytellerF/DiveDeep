@@ -1,11 +1,12 @@
 package com.storyteller_f.divedeep.shared
 
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class DiveDeepEngineTest {
     @Test
-    fun refreshFiltersEmptyNodesAndRendersMockTranslations() {
+    fun refreshFiltersEmptyNodesAndRendersMockTranslations() = runTest {
         val rendered = mutableListOf<TranslationFrame>()
         val engine = DiveDeepEngine(
             captureDriver = ContentCaptureDriver {
@@ -31,11 +32,12 @@ class DiveDeepEngineTest {
         assertEquals(1, frame.items.size)
         assertEquals("[English] 开始测试", frame.items.single().translatedText)
         assertEquals(emptyList(), rendered.first().items)
+        assertEquals(listOf("开始测试"), rendered.first().nodes.map { it.text })
         assertEquals(frame, rendered.last())
     }
 
     @Test
-    fun refreshKeepsListItemsWithDistinctBoundsWhenViewIdsAreShared() {
+    fun refreshKeepsListItemsWithDistinctBoundsWhenViewIdsAreShared() = runTest {
         val engine = DiveDeepEngine(
             captureDriver = ContentCaptureDriver {
                 listOf(
@@ -73,7 +75,7 @@ class DiveDeepEngineTest {
     }
 
     @Test
-    fun refreshRequestsOneNodeAtATimeAndRendersPartialFrames() {
+    fun refreshRequestsOneNodeAtATimeAndRendersPartialFrames() = runTest {
         val rendered = mutableListOf<TranslationFrame>()
         val requestSizes = mutableListOf<Int>()
         val engine = DiveDeepEngine(
@@ -109,11 +111,12 @@ class DiveDeepEngineTest {
 
         assertEquals(listOf(1, 1, 1), requestSizes)
         assertEquals(listOf(0, 1, 2, 3), rendered.map { it.items.size })
+        assertEquals(listOf(3, 3, 3, 3), rendered.map { it.nodes.size })
         assertEquals(frame, rendered.last())
     }
 
     @Test
-    fun refreshSkipsRenderingStaleNodeTranslationWhenStopped() {
+    fun refreshSkipsRenderingStaleNodeTranslationWhenStopped() = runTest {
         val rendered = mutableListOf<TranslationFrame>()
         var shouldContinueCalls = 0
         val engine = DiveDeepEngine(

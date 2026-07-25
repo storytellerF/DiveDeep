@@ -49,7 +49,7 @@ class LlmdIpcTranslationService(
         }
     }
 
-    override fun translate(request: TranslationRequest): List<TranslationItem> {
+    override suspend fun translate(request: TranslationRequest): List<TranslationItem> {
         if (request.items.isEmpty()) return emptyList()
 
         val config = configProvider()

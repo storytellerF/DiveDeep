@@ -6,14 +6,14 @@ class DiveDeepEngine(
     private val overlayRenderer: OverlayRenderer,
     private val targetLanguageProvider: () -> String,
 ) {
-    fun refresh(shouldContinue: () -> Boolean = { true }): TranslationFrame {
+    suspend fun refresh(shouldContinue: () -> Boolean = { true }): TranslationFrame {
         val nodes = captureDriver.captureVisibleText()
             .filter { it.visible && it.text.isNotBlank() && !it.bounds.isEmpty }
             .distinctBy { it.id }
 
         val targetLanguage = targetLanguageProvider()
         val translated = mutableListOf<TranslationItem>()
-        var frame = TranslationFrame(targetLanguage, emptyList())
+        var frame = TranslationFrame(targetLanguage, emptyList(), nodes)
         overlayRenderer.render(frame)
 
         nodes.forEach { node ->
@@ -28,7 +28,7 @@ class DiveDeepEngine(
             if (!shouldContinue()) return frame
 
             translated += nodeTranslation
-            frame = TranslationFrame(targetLanguage, translated.toList())
+            frame = TranslationFrame(targetLanguage, translated.toList(), nodes)
             overlayRenderer.render(frame)
         }
         return frame

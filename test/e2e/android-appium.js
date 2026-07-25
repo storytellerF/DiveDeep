@@ -56,6 +56,21 @@ async function findByText(sessionId, text) {
   }
 }
 
+async function findByResourceId(sessionId, resourceId) {
+  try {
+    const element = await request(sessionId, 'POST', '/element', {
+      using: 'id',
+      value: resourceId,
+    });
+    return element[ELEMENT_KEY] || element.ELEMENT;
+  } catch (error) {
+    if (error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function click(sessionId, elementId) {
   await request(sessionId, 'POST', `/element/${elementId}/click`, {});
 }
@@ -75,6 +90,7 @@ module.exports = {
   click,
   createSession,
   deleteSession,
+  findByResourceId,
   findByText,
   waitUntil,
 };

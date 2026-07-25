@@ -36,6 +36,5 @@ include(":androidApp")
 include(":androidTestFixture")
 include(":desktopApp")
 include(":shared")
-include(":webApp")
 
 project(":androidTestFixture").projectDir = file("apps/android-test-fixture/app")

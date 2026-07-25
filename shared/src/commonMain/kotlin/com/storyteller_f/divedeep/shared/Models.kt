@@ -44,6 +44,7 @@ data class TranslationItem(
 data class TranslationFrame(
     val targetLanguage: String,
     val items: List<TranslationItem>,
+    val nodes: List<ScreenTextNode> = emptyList(),
 )
 
 fun interface ContentCaptureDriver {
@@ -51,7 +52,7 @@ fun interface ContentCaptureDriver {
 }
 
 fun interface TranslationService {
-    fun translate(request: TranslationRequest): List<TranslationItem>
+    suspend fun translate(request: TranslationRequest): List<TranslationItem>
 }
 
 interface OverlayRenderer {
