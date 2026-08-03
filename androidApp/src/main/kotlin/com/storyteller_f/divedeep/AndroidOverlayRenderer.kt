@@ -137,13 +137,11 @@ class AndroidOverlayRenderer(
     ) {
         hideSheet()
         val sheet = bottomSheet(frame, node, item)
-        val metrics = service.resources.displayMetrics
+        sheet.setPadding(SHEET_MARGIN, 0, SHEET_MARGIN, SHEET_MARGIN)
         windowManager.addView(
             sheet,
-            overlayParams(metrics.widthPixels - SHEET_MARGIN * 2, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            overlayParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.BOTTOM or Gravity.START
-                x = SHEET_MARGIN
-                y = SHEET_MARGIN
             },
         )
         sheetView = sheet

@@ -245,7 +245,7 @@ assert_fixture_remains_interactive() {
   # Tap the left side of the fixture button, away from the overlay
   # translation button anchored at the node's top-right corner.
   read -r left top right bottom <<<"$bounds"
-  local tap_x=$((left + 60))
+  local tap_x=$((left + (right - left) / 3))
   local tap_y=$(((top + bottom) / 2))
 
   local attempt
