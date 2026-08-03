@@ -13,7 +13,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.storyteller_f.divedeep.shared.OverlayRenderer
@@ -46,7 +45,8 @@ class AndroidOverlayRenderer(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val windowManager = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val previousButtonPositions = mutableMapOf<String, Rect>()
-    private var overlayView: FrameLayout? = null
+    private val buttonViews = mutableMapOf<String, Button>()
+    private var sheetView: View? = null
     private var selectedNodeId: String? = null
 
     override fun render(frame: TranslationFrame) {
@@ -55,53 +55,117 @@ class AndroidOverlayRenderer(
             frame.items.take(PREVIEW_LOG_LIMIT).forEach { item ->
                 Log.i(TAG, "translation node=${item.nodeId} text=${item.translatedText}")
             }
-            if (frame.nodes.isEmpty() && overlayView == null) return@post
-
-            val overlay = ensureOverlay() ?: return@post
-            overlay.removeAllViews()
+            if (frame.nodes.isEmpty() && buttonViews.isEmpty() && sheetView == null) return@post
 
             val translatedByNodeId = frame.items.associateBy { it.nodeId }
             val overlayBounds = overlayBounds()
+            val activeNodeIds = mutableSetOf<String>()
             frame.nodes.forEach { node ->
                 val buttonBounds = buttonBoundsFor(node, overlayBounds) ?: return@forEach
-                overlay.addView(
-                    translationButton(
-                        node = node,
-                        item = translatedByNodeId[node.id],
-                        onClick = {
-                            selectedNodeId = node.id
-                            render(frame)
-                        },
-                    ),
-                    FrameLayout.LayoutParams(BUTTON_WIDTH, BUTTON_HEIGHT).apply {
-                        leftMargin = buttonBounds.left
-                        topMargin = buttonBounds.top
-                    },
-                )
-            }
-
-            selectedNodeId?.let { nodeId ->
-                val selectedNode = frame.nodes.firstOrNull { it.id == nodeId }
-                if (selectedNode == null) {
-                    selectedNodeId = null
-                } else {
-                    Log.i(TAG, "bottom sheet node=${selectedNode.id}")
-                    overlay.addView(bottomSheet(frame, selectedNode, translatedByNodeId[nodeId]))
+                activeNodeIds += node.id
+                showButton(node, translatedByNodeId[node.id], buttonBounds) {
+                    selectedNodeId = node.id
+                    render(frame)
                 }
+            }
+            removeStaleButtons(activeNodeIds)
+
+            val selectedNode = selectedNodeId?.let { nodeId ->
+                frame.nodes.firstOrNull { it.id == nodeId }
+            }
+            if (selectedNode == null) {
+                selectedNodeId = null
+                hideSheet()
+            } else {
+                Log.i(TAG, "bottom sheet node=${selectedNode.id}")
+                showSheet(frame, selectedNode, translatedByNodeId[selectedNode.id])
             }
         }
     }
 
     override fun clear() {
         mainHandler.post {
-            overlayView?.let { view ->
-                windowManager.removeView(view)
-            }
-            overlayView = null
+            removeStaleButtons(emptySet())
+            hideSheet()
             selectedNodeId = null
             previousButtonPositions.clear()
         }
     }
+
+    private fun showButton(
+        node: ScreenTextNode,
+        item: TranslationItem?,
+        bounds: Rect,
+        onClick: () -> Unit,
+    ) {
+        val existing = buttonViews[node.id]
+        if (existing != null) {
+            updateButton(existing, node, item)
+            existing.setOnClickListener { onClick() }
+            val params = existing.layoutParams as WindowManager.LayoutParams
+            if (params.x != bounds.left || params.y != bounds.top) {
+                params.x = bounds.left
+                params.y = bounds.top
+                windowManager.updateViewLayout(existing, params)
+            }
+            return
+        }
+
+        val button = translationButton(node, item, onClick)
+        windowManager.addView(button, overlayParams(bounds.width(), bounds.height()).apply {
+            x = bounds.left
+            y = bounds.top
+        })
+        buttonViews[node.id] = button
+    }
+
+    private fun removeStaleButtons(activeNodeIds: Set<String>) {
+        val iterator = buttonViews.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.key !in activeNodeIds) {
+                runCatching { windowManager.removeView(entry.value) }
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun showSheet(
+        frame: TranslationFrame,
+        node: ScreenTextNode,
+        item: TranslationItem?,
+    ) {
+        hideSheet()
+        val sheet = bottomSheet(frame, node, item)
+        val metrics = service.resources.displayMetrics
+        windowManager.addView(
+            sheet,
+            overlayParams(metrics.widthPixels - SHEET_MARGIN * 2, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.BOTTOM or Gravity.START
+                x = SHEET_MARGIN
+                y = SHEET_MARGIN
+            },
+        )
+        sheetView = sheet
+    }
+
+    private fun hideSheet() {
+        sheetView?.let { runCatching { windowManager.removeView(it) } }
+        sheetView = null
+    }
+
+    private fun overlayParams(width: Int, height: Int): WindowManager.LayoutParams =
+        WindowManager.LayoutParams(
+            width,
+            height,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
 
     private fun translationButton(
         node: ScreenTextNode,
@@ -109,18 +173,26 @@ class AndroidOverlayRenderer(
         onClick: () -> Unit,
     ): Button =
         Button(service).apply {
-            text = if (item == null) "翻译中" else "已翻译"
-            textSize = BUTTON_TEXT_SIZE_SP
-            setTextColor(Color.WHITE)
-            setBackgroundColor(if (item == null) BUTTON_LOADING_COLOR else BUTTON_DONE_COLOR)
             minWidth = 0
             minHeight = 0
             minimumWidth = 0
             minimumHeight = 0
-            contentDescription = "${node.text} ${text}"
             setPadding(0, 0, 0, 0)
+            textSize = BUTTON_TEXT_SIZE_SP
+            setTextColor(Color.WHITE)
+            updateButton(this, node, item)
             setOnClickListener { onClick() }
         }
+
+    private fun updateButton(
+        button: Button,
+        node: ScreenTextNode,
+        item: TranslationItem?,
+    ) {
+        button.text = if (item == null) "翻译中" else "已翻译"
+        button.setBackgroundColor(if (item == null) BUTTON_LOADING_COLOR else BUTTON_DONE_COLOR)
+        button.contentDescription = "${node.text} ${button.text}"
+    }
 
     private fun bottomSheet(
         frame: TranslationFrame,
@@ -135,15 +207,6 @@ class AndroidOverlayRenderer(
             addView(sheetText(node.text, SHEET_BODY_SIZE_SP, SHEET_SOURCE_COLOR))
             addView(sheetText("目标语言 ${frame.targetLanguage}", SHEET_TITLE_SIZE_SP, SHEET_SOURCE_COLOR))
             addView(sheetText(item?.translatedText ?: "翻译中", SHEET_BODY_SIZE_SP, SHEET_TRANSLATION_COLOR))
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                gravity = Gravity.BOTTOM
-                leftMargin = SHEET_MARGIN
-                rightMargin = SHEET_MARGIN
-                bottomMargin = SHEET_MARGIN
-            }
         }
 
     private fun sheetText(
@@ -179,28 +242,6 @@ class AndroidOverlayRenderer(
         }
         previousButtonPositions[node.id] = positioned
         return positioned
-    }
-
-    private fun ensureOverlay(): FrameLayout? {
-        overlayView?.let { return it }
-
-        val view = FrameLayout(service).apply {
-            setBackgroundColor(Color.TRANSPARENT)
-        }
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-        }
-        windowManager.addView(view, params)
-        overlayView = view
-        return view
     }
 
     private fun overlayBounds(): Rect {

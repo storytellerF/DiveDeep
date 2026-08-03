@@ -200,6 +200,18 @@ authorize_llmd_ipc() {
     node test/e2e/android-authorize-llmd.js
 }
 
+fixture_node_bounds() {
+  local node_id="$1"
+  adb_cmd shell uiautomator dump /sdcard/divedeep-window.xml >/dev/null
+  adb_cmd shell cat /sdcard/divedeep-window.xml | tr -d '\r' | grep -o "resource-id=\"com.storyteller_f.divedeep.fixture:id/${node_id}\"[^>]*/>" | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p'
+}
+
+fixture_dump_contains() {
+  local expected="$1"
+  adb_cmd shell uiautomator dump /sdcard/divedeep-window.xml >/dev/null
+  adb_cmd shell cat /sdcard/divedeep-window.xml | tr -d '\r' | grep -Fq "text=\"${expected}\""
+}
+
 tap_title_translation_button() {
   local bounds
   local left
@@ -207,8 +219,7 @@ tap_title_translation_button() {
   local right
   local bottom
 
-  adb_cmd shell uiautomator dump /sdcard/divedeep-window.xml >/dev/null
-  bounds="$(adb_cmd shell cat /sdcard/divedeep-window.xml | tr -d '\r' | grep -o 'resource-id="com.storyteller_f.divedeep.fixture:id/title_text"[^>]*/>' | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p')"
+  bounds="$(fixture_node_bounds title_text)"
   if [[ -z "$bounds" ]]; then
     echo "Fixture title bounds were not found." >&2
     exit 1
@@ -216,6 +227,41 @@ tap_title_translation_button() {
 
   read -r left top right bottom <<<"$bounds"
   adb_cmd shell input tap "$((right - 52))" "$((top + 28))"
+}
+
+assert_fixture_remains_interactive() {
+  local bounds
+  local left
+  local top
+  local right
+  local bottom
+
+  bounds="$(fixture_node_bounds primary_button)"
+  if [[ -z "$bounds" ]]; then
+    echo "Fixture primary button bounds were not found." >&2
+    exit 1
+  fi
+
+  # Tap the left side of the fixture button, away from the overlay
+  # translation button anchored at the node's top-right corner.
+  read -r left top right bottom <<<"$bounds"
+  local tap_x=$((left + 60))
+  local tap_y=$(((top + bottom) / 2))
+
+  local attempt
+  for attempt in 1 2; do
+    adb_cmd shell input tap "$tap_x" "$tap_y"
+    for _ in $(seq 1 10); do
+      if fixture_dump_contains "已点击 ${attempt} 次"; then
+        break
+      fi
+      sleep 1
+    done
+    if ! fixture_dump_contains "已点击 ${attempt} 次"; then
+      echo "Fixture app did not respond to tap ${attempt} while the overlay was visible." >&2
+      exit 1
+    fi
+  done
 }
 
 cleanup() {
@@ -276,6 +322,8 @@ if grep -Fq '[English]' /tmp/divedeep-overlay.log; then
   echo "DiveDeep overlay used mock translations." >&2
   exit 1
 fi
+
+assert_fixture_remains_interactive
 
 tap_title_translation_button
 

@@ -64,6 +64,10 @@ The script uses Appium with the UiAutomator2 driver to enable DiveDeep through t
 `node_modules` is missing, starts Appium on `127.0.0.1:4723` when no server is already running, and installs the
 UiAutomator2 driver when needed. Set `DEVICE`, `APPIUM_HOST`, or `APPIUM_PORT` to override the defaults.
 
+While the overlay buttons are visible, the script also taps the fixture app's own primary button (away from the
+overlay button) and asserts the fixture updates its tap counter, proving the overlay does not block interaction
+with the underlying app.
+
 ---
 
 Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
