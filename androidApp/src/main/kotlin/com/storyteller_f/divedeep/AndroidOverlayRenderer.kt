@@ -266,13 +266,18 @@ class AndroidOverlayRenderer(
 
     private fun bottomSheet(state: SheetUiState): View =
         LinearLayout(service).apply {
+            id = R.id.translation_sheet
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(SHEET_BACKGROUND_COLOR)
             setPadding(SHEET_PADDING, SHEET_PADDING, SHEET_PADDING, SHEET_PADDING)
             addView(sheetText("原文", SHEET_TITLE_SIZE_SP, SHEET_SOURCE_COLOR))
-            addView(sheetText(state.sourceText, SHEET_BODY_SIZE_SP, SHEET_SOURCE_COLOR))
+            addView(sheetText(state.sourceText, SHEET_BODY_SIZE_SP, SHEET_SOURCE_COLOR).apply {
+                id = R.id.translation_source
+            })
             addView(sheetText("目标语言 ${state.targetLanguage}", SHEET_TITLE_SIZE_SP, SHEET_SOURCE_COLOR))
-            addView(sheetText(state.translatedText ?: "翻译中", SHEET_BODY_SIZE_SP, SHEET_TRANSLATION_COLOR))
+            addView(sheetText(state.translatedText ?: "翻译中", SHEET_BODY_SIZE_SP, SHEET_TRANSLATION_COLOR).apply {
+                id = R.id.translation_result
+            })
         }
 
     private fun sheetText(

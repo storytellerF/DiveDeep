@@ -16,7 +16,7 @@ versions compatible rather than suppressing unsupported compile SDK warnings.
 Run the Android/Kotlin baseline from the repository root:
 
 ```sh
-./gradlew detekt :shared:jvmTest :shared:testAndroidHostTest :androidApp:assembleDebug :androidTestFixture:assembleDebug --no-daemon
+./gradlew detekt :shared:jvmTest :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidTestFixture:assembleDebug --no-daemon
 ```
 
 After changing Android build tooling or settings fields, also build both release
@@ -41,6 +41,145 @@ disabled-field retention, and replacement when a new configuration is loaded:
 
 Acquire the shared device lock before running this command on a shared device.
 These tests render an isolated settings screen and do not invoke llmd IPC.
+
+`AndroidSecureSettingsTest` covers native settings read failures, preservation of
+foreign accessibility services, and rejected deletion confirmation on failed
+readback. It also checks the direct provider query on the device without writing
+secure settings; failure cases use injected cursors and a recording command sink.
+
+### Android end-to-end tests
+
+The Windows/Linux host runner `scripts/android_e2e.py` owns the whole run: APK preparation,
+a private pre-run snapshot, command trees, cancellation, restoration and reports.
+The Bash entry `scripts/android-e2e.sh` forwards arguments only. Windows callers
+should use Python directly and cancel with Ctrl+C or Ctrl+Break; Git Bash
+`kill -TERM` against native Python is a forced termination and cannot run Python
+cleanup.
+
+Kotlin/JUnit + UIAutomator own each case's baseline, LLMD authorization and the
+cross-app assertions. No Appium server/session or npm dependencies are needed.
+The former npm authorization/toggle helpers are replaced by native JUnit tests.
+The settings controls tests cover explicit enable/disable transitions and saving
+the Local IPC backend with each Release/Daily/Debug target. Real LLMD cases are
+excluded from ordinary instrumentation discovery by `RealLlmdIntegration`.
+
+Acquire the environment's shared device lease before installation or any device
+test. Keep the full run and recovery within that lease. The lock helper belongs to
+the environment and is not vendored or reimplemented here. Host work defaults to
+1200 seconds plus a separate 120-second cleanup budget and up to 10 seconds per
+command-tree closure check; size the lease above that
+bound, and do not release/reuse a device whose cleanup is unconfirmed.
+
+Model-free checks:
+
+```sh
+python -m unittest discover -s test/e2e/unit -p 'test_*.py' -v
+ANDROID_SERIAL="$DEVICE" ./gradlew :androidApp:connectedDebugAndroidTest \
+  -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true --no-daemon
+```
+
+The host tests use stateful device boundaries and real native child processes;
+they do not claim device/model coverage. They assert that unknown reads authorize
+no writes, foreign services remain intact, rollback stops on failed prerequisites,
+backups survive incomplete restoration, and child/grandchild processes stop before
+restoration, including descendants that start new sessions. Fresh-process tests
+forcibly exit during claim, test execution, rollback and disposal, then discover
+and resume recovery in a new host. Faults are also injected before and after side
+effects. CI runs these checks on Windows and Ubuntu.
+
+For the real suite, install Python 3.10+, a JDK and the Android SDK. Unlock the
+leased device. Install LLMD with `com.storytellerf.llmd.action.BIND_IPC`, import
+`gemma-4-E2B-it.litertlm`, select it, switch the LLMD service on and wait for Ready.
+A model file on disk alone does not establish readiness.
+
+Inside the lease, run:
+
+```sh
+python scripts/android_e2e.py --device "$DEVICE" --llmd-variant debug
+# Optional provider installation/source-build inputs:
+python scripts/android_e2e.py --device "$DEVICE" --llmd-variant daily --llmd-apk /path/to/llmd-daily.apk
+python scripts/android_e2e.py --device "$DEVICE" --llmd-variant debug --llmd-repo ../llmd
+```
+
+`DEVICE`, `ADB`, `LLMD_VARIANT`, `LLMD_APK`, `LLMD_REPO` and `E2E_REPORT_DIR` are
+also accepted as environment defaults. Gradle receives the same device through
+`ANDROID_SERIAL`. The default LLMD variant is Release. Optional source builds
+support Debug only and use `npm run tauri android build -- --debug --apk` from
+LLMD's `app` directory; Node/npm are needed only for that optional provider build.
+Do not invoke Gradle directly from LLMD's generated Android directory.
+An installed package without the required IPC service follows the same upgrade
+path as a missing package. Installation is followed by a fresh capability check;
+an unreadable capability response fails without authorizing an upgrade.
+
+`OverlayLlmdIntegrationTest` reports four independent contracts: translated fixture
+overlay, underlying-page interaction, actual source/result detail UI, and removal
+of buttons and open details after service destruction. Unique fixture titles
+require fresh real-model translations. Mock translation is disabled. Each case
+opens the selected LLMD authorization page and verifies the caller package before
+clicking Allow; real Binder translation establishes successful authorization.
+This authorization persists as before. The suite preserves other accessibility
+services with `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES`.
+
+The host sets an on-device run marker and supplies the matching `hostRunId`,
+`realLlmd=true`, `llmdVariant` and class/filter instrumentation arguments. Cases
+reject direct invocation without matching host ownership. They finish with
+DiveDeep disabled and the fixture stopped. They never restore the pre-run snapshot;
+that belongs exclusively to the host after instrumentation and its native process
+tree have stopped.
+
+Restoration is ordered and verified: disable only DiveDeep's service, confirm
+its app and fixture are stopped, restore the private preferences, restore the
+original secure settings, verify, then dispose of backups and the run marker.
+Failure stops dependent writes. Read errors are exceptions; only a successful
+explicit probe can establish absence. Windows uses a Job Object. Linux uses a
+dedicated child subreaper which adopts orphaned descendants, including Gradle's
+detached single-use daemon, and acknowledges closure only after reaping the entire
+tree. Host exit closes its control pipe and initiates descendant cleanup. An
+unacknowledged supervisor exit blocks device restoration. Other host platforms
+fail before starting commands; they require an equivalent process-scope adapter.
+
+Binary preference copies stay on-device. A Base64 recovery copy and typed journal
+are retained in a stable private registry, never in the report tree. These files
+may contain a saved API key. The default registry is
+`%LOCALAPPDATA%/DiveDeep/e2e/runs` on Windows and
+`${XDG_STATE_HOME:-~/.local/state}/DiveDeep/e2e/runs` on Linux, indexed by a hash of
+the device serial and the run ID. Override with `--state-dir` or `E2E_STATE_DIR`;
+use the same registry when resuming. The host publishes the recovery path in its
+initial report and stdout before changing the device. Journal updates use an
+atomic replacement and flush to disk before their corresponding side effects.
+
+A failed rollback exits with status `needs-recovery` (exit code 2), keeps its marker
+and prints the private journal path. New runs reject an outstanding marker or
+local journal. After reconnecting the device, acquire its lease and discover the
+pending journal using the device's run marker. If marker publication or removal
+was interrupted, the sole pending local journal is used instead:
+
+```sh
+python scripts/android_e2e.py --device "$DEVICE" --recover
+# Explicit paths remain supported for older journals or a different registry:
+python scripts/android_e2e.py --device "$DEVICE" --recover /private/directory/run.json
+```
+
+If host process closure could not be confirmed, first confirm that the previous
+runner and its command descendants have stopped before attempting recovery.
+Recovery requires matching device/run ownership. It can resume interrupted
+rollback and disposal. Do not remove the marker, backups, or journal to bypass a
+failed recovery. If external app removal destroyed the on-device backup, preserve
+the host Base64 copy for manual recovery. Hard termination, host loss and offline
+devices cannot guarantee immediate cleanup; the retained record is unresolved work.
+
+Results:
+
+- Host `run.json`, Gradle logs, scoped diagnostic log and native UI artifacts:
+  `test/e2e/reports/<run-id>/`, or `--report-dir`/`E2E_REPORT_DIR`.
+- JUnit XML: `androidApp/build/outputs/androidTest-results/connected/`.
+- HTML: `androidApp/build/reports/androidTests/connected/`.
+- Native screenshots/hierarchies originate in the app's external
+  `files/e2e/<run-id>` directory. Authorization screenshots are kept per case;
+  failed cases also capture UI hierarchy and diagnostic logs.
+
+After verification, record device/Android version, LLMD variant/model, commands,
+pass/fail counts and any unavailable platform/model combinations.
 
 ### iOS simulator
 

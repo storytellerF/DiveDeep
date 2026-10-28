@@ -36,6 +36,7 @@ dependencies {
     debugImplementation(libs.compose.uiTestManifest)
     androidTestImplementation(libs.compose.uiTestJunit4)
     androidTestImplementation(libs.androidx.testExt.junit)
+    androidTestImplementation(libs.androidx.uiautomator)
     testImplementation(libs.kotlin.testJunit)
 }
 
@@ -54,6 +55,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["notAnnotation"] = "com.storyteller_f.divedeep.RealLlmdIntegration"
     }
     packaging {
         resources {

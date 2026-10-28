@@ -37,42 +37,13 @@ Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
   - JS target: `./gradlew :shared:jsTest`
 - iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
 
-### Android E2E
+### Android translation integration
 
-Run the Android accessibility smoke test with:
+The app supports Release, Daily, and Debug llmd packages. Choose the installed
+variant in local IPC settings and authorize DiveDeep in that llmd variant.
 
-```bash
-./scripts/android-e2e.sh
-```
-
-The app can target the Release (`com.storytellerf.llmd`), Daily (`com.storytellerf.llmd.daily`), or Debug
-(`com.storytellerf.llmd.debug`) llmd package from its local IPC settings. Authorization and Binder calls always use the selected
-package.
-
-The E2E test uses the real local llmd IPC service and does not enable mock translation. Select the installed variant with
-`LLMD_VARIANT=release|daily|debug`; the default is `release`. If llmd is missing, either pass a matching APK or point the script at
-an llmd checkout for an automatic Debug build:
-
-```bash
-LLMD_VARIANT=debug LLMD_APK=/path/to/app-universal-debug.apk ./scripts/android-e2e.sh
-LLMD_VARIANT=debug LLMD_REPO=../llmd ./scripts/android-e2e.sh
-LLMD_VARIANT=daily LLMD_APK=/path/to/app-universal-daily.apk ./scripts/android-e2e.sh
-```
-
-When `LLMD_REPO` is set for the Debug variant, the script builds llmd from the Tauri app directory with
-`npm run tauri android build -- --debug --apk`
-and installs the newest generated APK. Do not build llmd for this test by running Gradle directly from llmd's
-`app/src-tauri/gen/android` directory; that generated build expects Tauri mobile build context and can fail with a refused
-WebSocket connection. DiveDeep opens the llmd authorization screen before saving the local IPC backend, and llmd must authorize
-the installed DiveDeep package before IPC requests succeed.
-
-The script uses Appium with the UiAutomator2 driver to enable DiveDeep through the app UI. It runs `npm ci` when
-`node_modules` is missing, starts Appium on `127.0.0.1:4723` when no server is already running, and installs the
-UiAutomator2 driver when needed. Set `DEVICE`, `APPIUM_HOST`, or `APPIUM_PORT` to override the defaults.
-
-While the overlay buttons are visible, the script also taps the fixture app's own primary button (away from the
-overlay button) and asserts the fixture updates its tap counter, proving the overlay does not block interaction
-with the underlying app.
+Contributor setup, deterministic regression tests, and real-device translation
+integration tests are documented in [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests).
 
 ---
 

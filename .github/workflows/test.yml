@@ -7,6 +7,10 @@ on:
       - 'androidApp/**'
       - 'apps/android-test-fixture/**'
       - 'shared/**'
+      - 'test/e2e/**'
+      - 'scripts/android-e2e.sh'
+      - 'scripts/android_e2e.py'
+      - 'scripts/e2e_*.py'
       - '**/*.gradle.kts'
       - 'config/detekt/**'
       - 'gradle/libs.versions.toml'
@@ -15,6 +19,18 @@ on:
       - '.github/workflows/test.yml'
 
 jobs:
+  e2e-orchestration:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s test/e2e/unit -p 'test_*.py' -v
+
   test:
     runs-on: ubuntu-latest
 
@@ -31,4 +47,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run tests
-        run: ./gradlew detekt :shared:jvmTest :shared:testAndroidHostTest :androidApp:assembleDebug :androidTestFixture:assembleDebug --no-daemon
+        run: ./gradlew detekt :shared:jvmTest :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidTestFixture:assembleDebug --no-daemon

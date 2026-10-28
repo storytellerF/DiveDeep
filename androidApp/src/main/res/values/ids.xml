@@ -1,0 +1,5 @@
+<resources>
+    <item name="translation_sheet" type="id" />
+    <item name="translation_source" type="id" />
+    <item name="translation_result" type="id" />
+</resources>
