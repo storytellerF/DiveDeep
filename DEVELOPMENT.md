@@ -1,5 +1,3 @@
-<a id="development"></a>
-
 # 开发
 
 ## Android SDK
@@ -7,8 +5,6 @@
 构建前安装 Android SDK Platform 37.1（`platforms;android-37.1`）并接受 SDK 许可证。Android 应用、共享库和测试夹具使用 API 37、minor API level 1，因为更新的 Compose Android 依赖需要此版本。主要和次要 compile SDK 版本配置于 `gradle/libs.versions.toml`，target 与 minimum SDK 版本独立设置。
 
 构建使用 AGP 9.4.1、Gradle 9.8.2 和 compile SDK 37.1。保持这些版本兼容，不要压制不受支持 compile SDK 的警告。
-
-<a id="validation"></a>
 
 ## 验证
 
@@ -35,8 +31,6 @@
 共享设备运行此命令前先获取共享设备锁。这些测试渲染隔离的设置页面，不调用 llmd IPC。
 
 `AndroidSecureSettingsTest` 覆盖原生设置读取失败、保留其他无障碍服务，以及读取回验失败时拒绝确认删除。还会在设备上直接查询提供方而不写入 secure settings；失败场景使用注入 cursor 和记录命令的 sink。
-
-<a id="android-end-to-end-tests"></a>
 
 ### Android 端到端测试
 
@@ -126,8 +120,6 @@ python scripts/android_e2e.py --device "$DEVICE" --recover /private/directory/ru
 
 验证后记录设备和 Android 版本、LLMD 变体及模型、命令、通过与失败数量，以及不可用的平台或模型组合。
 
-<a id="ios-simulator"></a>
-
 ### iOS 模拟器
 
 **iOS Test** workflow（`.github/workflows/ios-test.yml`）在相关 pull request 和手动触发时，于 Apple Silicon `macos-15` runner 运行 `:shared:iosSimulatorArm64Test`，在 iOS 模拟器执行共享 common 测试并上传结果，不测试 SwiftUI 应用。
@@ -139,8 +131,6 @@ python scripts/android_e2e.py --device "$DEVICE" --recover /private/directory/ru
 ```
 
 Windows 和 Linux 无法运行该任务。在这些宿主上任务禁用不代表 iOS 测试通过，应检查 macOS workflow 结果。
-
-<a id="gradle-deprecation-diagnosis"></a>
 
 ### Gradle 弃用诊断
 

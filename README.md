@@ -1,7 +1,5 @@
 这是一个面向 Android、iOS、Web 和 Desktop（JVM）的 Kotlin Multiplatform 项目。
 
-<a id="android-screen-translation"></a>
-
 ### Android 屏幕翻译
 
 Debug 和 Alpha 可与 Release 并存安装，application ID 分别带 `.debug` 和 `.alpha` 后缀。启动图标带 **DEBUG** 和 **ALPHA** 标记。各变体有独立设置和数据，旧的不带后缀的 Debug 安装不会自动迁移到新 Debug 包。
@@ -22,8 +20,6 @@ Debug 和 Alpha 可与 Release 并存安装，application ID 分别带 `.debug` 
   - [commonMain](./shared/src/commonMain/kotlin) 存放所有 target 通用代码。
   - 其他目录中的 Kotlin 代码只面向目录名所示平台编译。例如，Kotlin 应用的 iOS 部分调用 Apple CoreCrypto 时，应放在 [iosMain](./shared/src/iosMain/kotlin)；修改 Desktop（JVM）专用部分时，应放在 [jvmMain](./shared/src/jvmMain/kotlin)。
 
-<a id="running-the-apps"></a>
-
 ### 运行应用
 
 使用 IDE 工具栏运行控件提供的配置，也可使用以下命令和选项：
@@ -37,8 +33,6 @@ Debug 和 Alpha 可与 Release 并存安装，application ID 分别带 `.debug` 
   - JS target（较慢，支持旧浏览器）：`./gradlew :webApp:jsBrowserDevelopmentRun`。
 - iOS 应用：在 Xcode 中打开 [/iosApp](./iosApp) 并运行。
 
-<a id="running-tests"></a>
-
 ### 运行测试
 
 使用 IDE 编辑器行号栏的运行按钮，或执行 Gradle 任务：
@@ -51,13 +45,11 @@ Debug 和 Alpha 可与 Release 并存安装，application ID 分别带 `.debug` 
   - JS target：`./gradlew :shared:jsTest`。
 - iOS 测试：`./gradlew :shared:iosSimulatorArm64Test`。
 
-<a id="android-translation-integration"></a>
-
 ### Android 翻译集成
 
 应用支持 Release、Daily 和 Debug llmd 包。在本地 IPC 设置选择已安装变体，并在该 llmd 变体中授权 DiveDeep。
 
-贡献者环境配置、确定性回归测试和真实设备翻译集成测试见 [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests)。
+贡献者环境配置、确定性回归测试和真实设备翻译集成测试见 [DEVELOPMENT.md](DEVELOPMENT.md#android-端到端测试)。
 
 ---
 
