@@ -1,36 +1,33 @@
-# Project Rules
+<a id="project-rules"></a>
 
-## General
+# 项目规则
 
-- Keep changes scoped to the requested behavior. Do not mix unrelated refactors into feature or test changes.
-- Prefer the existing Kotlin, Gradle, Compose, and shell script patterns in this repository.
-- The shared module currently targets Android, iOS, and JVM only. JS/WASM web targets are disabled because shared `commonMain` uses Room/SQLite for translation caching.
-- After code changes, run the narrowest checks that cover the touched behavior. Broaden to the full checks below when shared Android, IPC, workflow, or end-to-end behavior changes.
+<a id="general"></a>
 
-## Testing
+## 通用规则
 
-Use this baseline check before handing off Android/Kotlin changes:
+- 将改动限制在请求的行为范围内，不在功能或测试修改中混入无关重构。
+- 优先遵循仓库已有 Kotlin、Gradle、Compose 和 shell 脚本模式。
+- 共享模块当前只面向 Android、iOS 和 JVM。JS/WASM Web target 已禁用，因为共享 `commonMain` 使用 Room/SQLite 缓存翻译。
+- 修改代码后，运行能覆盖受影响行为的最小检查。共享 Android、IPC、workflow 或端到端行为变化时，扩大到下文完整检查。
+
+<a id="testing"></a>
+
+## 测试
+
+交付 Android/Kotlin 修改前，运行以下基线检查：
 
 ```bash
 ./gradlew detekt :shared:jvmTest :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidTestFixture:assembleDebug --no-daemon
 ```
 
-For Android test architecture, prerequisites, commands, reports, and recovery,
-follow [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests).
+Android 测试架构、前提、命令、报告和恢复流程遵循 [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests)。
 
-- Serialize every device operation with the environment's shared device-lock helper.
-  Use its absolute installed path; do not assume a helper is vendored in this repo.
-- Preserve real cross-app LLMD IPC coverage. Never substitute mock translation for
-  `OverlayLlmdIntegrationTest`; model-free regressions are a separate suite.
-- The host runner owns the original device/app snapshot; Kotlin cases own only
-  their temporary baseline. Keep that boundary and stop rollback on failed prerequisites.
-- For host E2E changes, run `python -m unittest discover -s test/e2e/unit -p 'test_*.py' -v`.
-  These stateful boundary/process tests do not access a device.
-- Preserve cross-process crash/recovery coverage and detached-descendant process
-  tests when changing the host runner or its platform adapters.
-- A `needs-recovery` result is unresolved work. Preserve its private journal/backups,
-  recover under the external device lease, and verify before reusing the device.
-- For Android test/build changes, also compile `:androidApp:assembleDebugAndroidTest`
-  and run affected device cases when the required device/model is available.
-- Do not run Gradle directly from LLMD's generated Android directory for a full APK
-  build. Use its Tauri CLI as documented in DEVELOPMENT.md.
+- 每项设备操作都通过环境共享的设备锁辅助程序串行化。使用其已安装的绝对路径，不假定本仓库内置辅助程序。
+- 保留真实跨应用 LLMD IPC 覆盖。不得用模拟翻译替代 `OverlayLlmdIntegrationTest`；不需要模型的回归测试是独立套件。
+- 宿主运行器管理设备和应用的原始快照；Kotlin 用例只管理其临时基线。保留该边界，前提失败时停止回滚。
+- 修改宿主 E2E 后，运行 `python -m unittest discover -s test/e2e/unit -p 'test_*.py' -v`。这些有状态边界与进程测试不访问设备。
+- 修改宿主运行器或平台适配器时，保留跨进程崩溃恢复和脱离父进程的后代进程测试。
+- `needs-recovery` 表示尚未解决的工作。保留私有日志和备份，在外部设备租约内恢复，验证后再复用设备。
+- 修改 Android 测试或构建后，还需编译 `:androidApp:assembleDebugAndroidTest`，在所需设备和模型可用时运行受影响设备用例。
+- 完整构建 LLMD APK 时，不要直接从其生成的 Android 目录运行 Gradle。按 DEVELOPMENT.md 使用 Tauri CLI。

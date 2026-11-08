@@ -1,91 +1,66 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web, Desktop (JVM).
+这是一个面向 Android、iOS、Web 和 Desktop（JVM）的 Kotlin Multiplatform 项目。
 
-### Android screen translation
+<a id="android-screen-translation"></a>
 
-Debug and Alpha can be installed beside Release, using `.debug` and `.alpha`
-application ID suffixes. Their launcher icons carry **DEBUG** and **ALPHA**
-ribbons. Each variant has its own settings and data; older unsuffixed Debug
-installations do not automatically migrate to the new Debug package.
+### Android 屏幕翻译
 
-The home screen provides the translation switch, accessibility setup, and a
-clearly labelled example of the translation display. Enable DiveDeep in Android's
-accessibility settings before using screen translation; the home switch alone
-does not grant accessibility access. You can also toggle translation through the
-Quick Settings tile.
+Debug 和 Alpha 可与 Release 并存安装，application ID 分别带 `.debug` 和 `.alpha` 后缀。启动图标带 **DEBUG** 和 **ALPHA** 标记。各变体有独立设置和数据，旧的不带后缀的 Debug 安装不会自动迁移到新 Debug 包。
 
-Open **翻译服务** to select local llmd IPC or an HTTP/HTTPS API, configure the
-model and connection, then tap **保存翻译配置**. Local llmd requires caller
-authorization in the selected llmd variant. API keys stay masked, and switching
-backends preserves the entered connection details. Unsaved edits remain available
-when moving between the home and configuration screens during the same session.
+首页提供翻译开关、无障碍设置入口，以及明确标注的翻译显示示例。使用屏幕翻译前，在 Android 无障碍设置启用 DiveDeep；只打开首页开关不会授予无障碍访问。也可通过快捷设置磁贴切换翻译。
 
-Open **应用排除** to choose apps that should not be translated. Checked apps are
-excluded, and changes save automatically. **使用 Mock 翻译** is available under
-the translation service's development options for testing only.
+打开**翻译服务**，选择本地 llmd IPC 或 HTTP/HTTPS API，配置模型与连接，然后点击**保存翻译配置**。本地 llmd 需要在选定 llmd 变体中授权调用方。API 密钥始终遮蔽显示，切换后端时保留已输入连接信息。同一会话在首页与配置页之间切换时，尚未保存的编辑仍会保留。
 
-Text language is detected offline on the device. Only text identified as a
-different language from the system language gets a translation icon and is sent
-for translation. Regional variants of the same language are treated as the same;
-text whose language cannot be reliably identified is skipped.
+打开**应用排除**，选择不需要翻译的应用。勾选的应用被排除，修改自动保存。翻译服务开发选项中的**使用 Mock 翻译**仅用于测试。
 
-Tap a floating translation icon to open translation details. The sheet shows the
-translation first, with the source below it. Long content scrolls inside the
-sheet; **复制译文** copies the result and **关闭** returns to the page. The page
-keeps receiving touches outside the floating controls.
-If local llmd stops or becomes unavailable, the floating controls continue
-following visible text and can still be disabled; new translations require the
-provider to be ready again.
+文本语言在设备上离线检测。只有被识别为与系统语言不同的文本，才会显示翻译图标并发送翻译。同一语言的地区变体视为相同语言；无法可靠识别语言的文本会跳过。
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+点击悬浮翻译图标打开翻译详情。面板先显示译文，下方显示原文。长内容在面板内滚动，**复制译文**复制结果，**关闭**返回页面。悬浮控件之外的区域仍将触摸传递给底层页面。如果本地 llmd 停止或不可用，悬浮控件仍跟随可见文本，也仍能关闭；新的翻译需要提供方恢复就绪。
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+* [/iosApp](./iosApp/iosApp) 包含 iOS 应用。即使通过 Compose Multiplatform 共享 UI，iOS 应用仍需此入口。项目的 SwiftUI 代码也应放在这里。
 
-### Running the apps
+* [/shared](./shared/src) 存放 Compose Multiplatform 应用间共享代码，包含以下子目录：
+  - [commonMain](./shared/src/commonMain/kotlin) 存放所有 target 通用代码。
+  - 其他目录中的 Kotlin 代码只面向目录名所示平台编译。例如，Kotlin 应用的 iOS 部分调用 Apple CoreCrypto 时，应放在 [iosMain](./shared/src/iosMain/kotlin)；修改 Desktop（JVM）专用部分时，应放在 [jvmMain](./shared/src/jvmMain/kotlin)。
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+<a id="running-the-apps"></a>
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- Desktop app:
-  - Hot reload: `./gradlew :desktopApp:hotRun --auto`
-  - Standard run: `./gradlew :desktopApp:run`
-- Web app:
-  - Wasm target (faster, modern browsers): `./gradlew :webApp:wasmJsBrowserDevelopmentRun`
-  - JS target (slower, supports older browsers): `./gradlew :webApp:jsBrowserDevelopmentRun`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+### 运行应用
 
-### Running tests
+使用 IDE 工具栏运行控件提供的配置，也可使用以下命令和选项：
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+- Android 应用：`./gradlew :androidApp:assembleDebug`。
+- 桌面应用：
+  - 热重载：`./gradlew :desktopApp:hotRun --auto`。
+  - 常规运行：`./gradlew :desktopApp:run`。
+- Web 应用：
+  - Wasm target（更快，面向现代浏览器）：`./gradlew :webApp:wasmJsBrowserDevelopmentRun`。
+  - JS target（较慢，支持旧浏览器）：`./gradlew :webApp:jsBrowserDevelopmentRun`。
+- iOS 应用：在 Xcode 中打开 [/iosApp](./iosApp) 并运行。
 
-- Static analysis: `./gradlew detekt`
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- Desktop tests: `./gradlew :shared:jvmTest`
-- Web tests:
-  - Wasm target: `./gradlew :shared:wasmJsTest`
-  - JS target: `./gradlew :shared:jsTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+<a id="running-tests"></a>
 
-### Android translation integration
+### 运行测试
 
-The app supports Release, Daily, and Debug llmd packages. Choose the installed
-variant in local IPC settings and authorize DiveDeep in that llmd variant.
+使用 IDE 编辑器行号栏的运行按钮，或执行 Gradle 任务：
 
-Contributor setup, deterministic regression tests, and real-device translation
-integration tests are documented in [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests).
+- 静态分析：`./gradlew detekt`。
+- Android 测试：`./gradlew :shared:testAndroidHostTest`。
+- 桌面测试：`./gradlew :shared:jvmTest`。
+- Web 测试：
+  - Wasm target：`./gradlew :shared:wasmJsTest`。
+  - JS target：`./gradlew :shared:jsTest`。
+- iOS 测试：`./gradlew :shared:iosSimulatorArm64Test`。
+
+<a id="android-translation-integration"></a>
+
+### Android 翻译集成
+
+应用支持 Release、Daily 和 Debug llmd 包。在本地 IPC 设置选择已安装变体，并在该 llmd 变体中授权 DiveDeep。
+
+贡献者环境配置、确定性回归测试和真实设备翻译集成测试见 [DEVELOPMENT.md](DEVELOPMENT.md#android-end-to-end-tests)。
 
 ---
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
+进一步了解 [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)、[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform) 和 [Kotlin/Wasm](https://kotl.in/wasm/)……
 
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+欢迎在公开 Slack 频道 [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web) 反馈 Compose/Web 和 Kotlin/Wasm 的使用体验。遇到问题请在 [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP) 报告。
