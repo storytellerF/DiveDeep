@@ -4,10 +4,13 @@ permissions:
   contents: write
 
 on:
+  release:
+    types: [published]
   push:
-    tags:
-      - '*'
     branches: [ "main" ]
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name }}
 
 jobs:
   build:
@@ -32,7 +35,7 @@ jobs:
 
       - name: Assemble APK
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "release" ]]; then
             ./gradlew :androidApp:assembleRelease --no-daemon
           else
             ./gradlew :androidApp:assembleDaily --no-daemon
@@ -52,7 +55,7 @@ jobs:
   release:
     name: Upload release assets
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: (github.event_name == 'release')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,13 +69,6 @@ jobs:
           name: Signed APK
           path: release-assets
 
-      - name: Create release when missing
-        shell: bash
-        run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
-          fi
-
       - name: Upload release assets
         shell: bash
         run: |
@@ -81,4 +77,4 @@ jobs:
             echo "No release assets found" >&2
             exit 1
           fi
-          gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
